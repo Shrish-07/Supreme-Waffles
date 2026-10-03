@@ -1,0 +1,28 @@
+# ClaimShield code ownership. Replace the placeholder handles with real GitHub
+# usernames or teams. Ownership mirrors the branch model in docs/BRANCH_WORKFLOW.md.
+
+# Default owner: Member 1 (main branch, Core + contracts)
+*                     @member1
+
+# Member 1 — Core backend, shared contracts, scripts, CI, docs
+/core/                @member1
+/shared/              @member1
+/scripts/             @member1
+/docs/                @member1
+/.github/             @member1
+/docker-compose.yml   @member1
+/Makefile             @member1
+/.env.example         @member1
+
+# Member 2 — Relay patient experience (branch-1-relay)
+/relay/               @member2
+
+# Members 3 + 4 — Fetch agent network, FinchNode, intelligence (branch-2-fetch)
+/fetch/               @member3 @member4
+/finchnode/           @member4 @member3
+/intelligence/        @member4 @member3
+
+# Contract changes always need Member 1 review, even inside a branch folder.
+/shared/python/claimshield_contracts/  @member1
+/shared/openapi/                       @member1
+/shared/ts/                            @member1

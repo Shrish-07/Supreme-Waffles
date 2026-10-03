@@ -1,0 +1,83 @@
+# ClaimShield local stack.
+#   make dev                          -> core + db
+#   docker compose --profile relay up -> + Relay service
+#   docker compose --profile agents up -> + Fetch agents (needs *_SEED in .env)
+#   docker compose --profile ollama up -> + local Ollama for EXTRACTION_MODE=ollama
+#
+# The Postgres credentials below are local-development defaults, not secrets.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: claimshield
+      POSTGRES_PASSWORD: claimshield_dev
+      POSTGRES_DB: claimshield
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U claimshield -d claimshield"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  core:
+    build:
+      context: .
+      dockerfile: core/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://claimshield:claimshield_dev@db:5432/claimshield
+      CORE_BASE_URL: http://core:8080
+      RELAY_SERVICE_URL: http://relay:3000
+      ORCHESTRATOR_URL: http://agents:8000
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  relay:
+    profiles: ["relay"]
+    build:
+      context: .
+      dockerfile: relay/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CORE_BASE_URL: http://core:8080
+    depends_on:
+      - core
+    ports:
+      - "3000:3000"
+
+  agents:
+    profiles: ["agents"]
+    build:
+      context: .
+      dockerfile: fetch/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CORE_BASE_URL: http://core:8080
+    depends_on:
+      - core
+    ports:
+      - "8000:8000"
+
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+volumes:
+  pgdata:
+  ollama:
