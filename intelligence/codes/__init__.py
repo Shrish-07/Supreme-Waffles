@@ -1,1 +1,1 @@
-"""Package placeholder; implemented in a later phase."""
+"""intelligence.codes (see intelligence/__init__.py)."""

@@ -32,6 +32,7 @@ from claimshield_contracts.models import (
     InsurerResponse,
 )
 from claimshield_contracts.tool_api import (
+    AGENT_TOOLS,
     AgentRunRef,
     DisputeCaseView,
     FindOrCreateCaseRequest,
@@ -93,16 +94,18 @@ class ToolService:
 
     # ------------------------------------------------------------------ plumbing
 
-    def _authorize(self, tool: ToolName) -> None:
+    def _authorize(self, tool: ToolName, agent_run: AgentRunRef | None = None) -> None:
         if not self._caller.has(tool_scope(tool)):
             raise Forbidden(f"{self._caller.name.value} may not call tool {tool.value}")
+        if agent_run is not None and tool not in AGENT_TOOLS[agent_run.agent]:
+            raise Forbidden(f"{agent_run.agent.value} is not allowed to call {tool.value}")
 
     @contextmanager
     def _tx(
         self, tool: ToolName, case_id: str | None, agent_run: AgentRunRef | None = None
     ) -> Iterator[Session]:
         """Authorize, open a transaction, audit on success."""
-        self._authorize(tool)
+        self._authorize(tool, agent_run)
         with self._c.session_scope() as db:
             yield db
             self._audit(db, tool, case_id, agent_run)
@@ -343,7 +346,7 @@ class ToolService:
     def resolve_human_intervention(
         self, req: ResolveHumanInterventionRequest
     ) -> HumanResolutionResult:
-        self._authorize(ToolName.RESOLVE_HUMAN_INTERVENTION)
+        self._authorize(ToolName.RESOLVE_HUMAN_INTERVENTION, req.agent_run)
         result = workflows.resolve_intervention(
             self._c,
             intervention_id=req.intervention_id,
@@ -361,7 +364,7 @@ class ToolService:
     # ------------------------------------------------------------------ calls
 
     def request_human(self, req: RequestHumanRequest) -> HumanIntervention:
-        self._authorize(ToolName.REQUEST_HUMAN)
+        self._authorize(ToolName.REQUEST_HUMAN, req.agent_run)
         intervention = workflows.request_human(
             self._c,
             case_id=req.case_id,
@@ -376,7 +379,7 @@ class ToolService:
         return intervention
 
     def start_insurance_call(self, req: StartInsuranceCallRequest) -> CallSession:
-        self._authorize(ToolName.START_INSURANCE_CALL)
+        self._authorize(ToolName.START_INSURANCE_CALL, req.agent_run)
         call = self._c.voice_manager.start_call(req.case_id, actor=self._actor)
         with self._c.session_scope() as db:
             self._audit(db, ToolName.START_INSURANCE_CALL, req.case_id, req.agent_run)

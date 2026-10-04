@@ -1,1 +1,1 @@
-"""Package placeholder; implemented in a later phase."""
+"""intelligence.policy_rag (see intelligence/__init__.py)."""

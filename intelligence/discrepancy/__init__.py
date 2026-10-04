@@ -1,1 +1,1 @@
-"""Package placeholder; implemented in a later phase."""
+"""intelligence.discrepancy (see intelligence/__init__.py)."""

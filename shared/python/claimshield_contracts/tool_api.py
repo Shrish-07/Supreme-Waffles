@@ -297,6 +297,60 @@ TOOL_SPECS: dict[ToolName, tuple[type[BaseModel], type[BaseModel]]] = {
 }
 
 
+# Least-privilege allowlist per agent. Core enforces it whenever a tool call
+# carries ``agent_run`` (agents always send it). Agents share the Fetch token,
+# so this catches bugs, not a hostile caller; issue per-agent tokens for that.
+AGENT_TOOLS: dict[AgentName, frozenset[ToolName]] = {
+    AgentName.ORCHESTRATOR: frozenset(
+        {
+            ToolName.FIND_OR_CREATE_CASE,
+            ToolName.GET_CASE,
+            ToolName.RECORD_CONSENT,
+            ToolName.INGEST_CLAIM,
+            ToolName.RESOLVE_HUMAN_INTERVENTION,
+            ToolName.RECORD_PATIENT_DECISION,
+        }
+    ),
+    AgentName.VISIT_AGENT: frozenset(
+        {
+            ToolName.GET_CASE,
+            ToolName.GET_VISIT_TRANSCRIPT,
+            ToolName.GET_SUPPORTING_EVIDENCE,
+            ToolName.RECORD_VISIT_EVIDENCE,
+        }
+    ),
+    AgentName.CLAIM_AGENT: frozenset(
+        {
+            ToolName.GET_CASE,
+            ToolName.GET_CASE_CLAIM,
+            ToolName.GET_SUPPORTING_EVIDENCE,
+            ToolName.GET_PATIENT_CLAIMS,
+            ToolName.GET_PATIENT_ENCOUNTERS,
+            ToolName.GET_PATIENT_PROCEDURES,
+            ToolName.GET_PATIENT_MEDICATIONS,
+            ToolName.RECORD_FINDINGS,
+        }
+    ),
+    AgentName.DISPUTE_AGENT: frozenset(
+        {
+            ToolName.GET_CASE,
+            ToolName.GET_DISPUTE_CASE,
+            ToolName.RECORD_DISPUTE,
+            ToolName.START_INSURANCE_CALL,
+        }
+    ),
+    AgentName.VOICE_AGENT: frozenset(
+        {
+            ToolName.GET_DISPUTE_CASE,
+            ToolName.GET_CLAIM_LINE,
+            ToolName.GET_SUPPORTING_EVIDENCE,
+            ToolName.RECORD_INSURER_RESPONSE,
+            ToolName.REQUEST_HUMAN,
+        }
+    ),
+}
+
+
 class CoreToolError(Exception):
     """Raised by any CoreTools implementation when Core rejects a tool call."""
 
