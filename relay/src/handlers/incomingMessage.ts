@@ -3,7 +3,12 @@ import { CoreError } from "../coreClient";
 import type { Conversation } from "../store";
 import { BUTTONS, copy } from "../ux/messages";
 import type { InboundEvent } from "../webhook";
-import { onRecordingCompleted, answerRecordingChoice } from "./appointmentRecording";
+import {
+  answerRecordingChoice,
+  awaitVoiceMemo,
+  checkVisitEvidence,
+  onRecordingCompleted,
+} from "./appointmentRecording";
 import { answerOpenPrompt, captureClaimId, replyToNotification, reviewBill } from "./approvalFlow";
 import { answerDataConsent, askDataConsent } from "./consent";
 import { type HandlerContext, say, serialize } from "./context";
@@ -81,6 +86,11 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
     await onRecordingCompleted(ctx, convo, event.recordingUrl);
     return;
   }
+  if (event.audio) {
+    if (convo.stage !== "recording") return await say(ctx, convo, copy.audioNotExpected);
+    ctx.log(`voice memo received (${event.audio.mimeType}, ${event.audio.sizeBytes ?? "?"} bytes)`);
+    return await onRecordingCompleted(ctx, convo, event.audio.url, event.audio.mimeType);
+  }
   const choice = event.buttonId ?? normalizeText(event.text);
   if (choice?.startsWith("ntf:")) {
     await replyToNotification(ctx, convo, choice, event.id);
@@ -96,7 +106,10 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
     case "awaiting_recording_choice":
       return await answerRecordingChoice(ctx, convo, choice);
     case "recording":
-      return await say(ctx, convo, copy.recordingStarted);
+      return await awaitVoiceMemo(ctx, convo, choice);
+    case "processing_visit":
+      if (await checkVisitEvidence(ctx, convo)) return;
+      return await say(ctx, convo, copy.stillProcessingVisit);
     case "ready_for_bill":
       if (choice === BUTTONS.reviewBill.id || /review|bill/i.test(event.text ?? "")) {
         return await reviewBill(ctx, convo);

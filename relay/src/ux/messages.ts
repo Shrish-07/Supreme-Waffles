@@ -34,6 +34,17 @@ export const DATA_CONSENT_TEXT =
 export const RECORDING_CONSENT_TEXT =
   "I agree that ClaimShield may record and transcribe this appointment for my bill review.";
 
+/** The extractor marks ruled-out services as "NOT anesthesia"; patients read "no anesthesia". */
+function describeEvidence(item: { description: string; negated?: boolean }): string {
+  return item.negated ? `no ${item.description.replace(/^NOT\s+/i, "")}` : item.description;
+}
+
+/** "a", "a and b", "a, b and c". */
+export function listItems(items: string[]): string {
+  if (items.length <= 2) return items.join(" and ");
+  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
+
 export const copy = {
   welcome:
     "Hi! I'm ClaimShield. I compare your medical bills with your health records and visit " +
@@ -51,11 +62,29 @@ export const copy = {
     buttons: [BUTTONS.recordYes, BUTTONS.recordSkip],
   }),
   recordingStarted: "Recording started. I'll process it when your appointment ends.",
-  transcriptReady: (items: string[]): OutboundMessage => ({
+  sendVoiceMemo: (): OutboundMessage => ({
     text:
-      "Your visit recording is processed." +
-      (items.length ? ` I noted: ${items.join("; ")}.` : "") +
-      "\n\nWhen your bill arrives, tap Review my bill.",
+      "Great. Record your appointment as a voice memo (hold the mic button in this chat) " +
+      "and send it here. I'll transcribe it and note what was done.",
+    buttons: [BUTTONS.recordSkip],
+  }),
+  transcribing: "Got your recording. Give me a moment to go through it.",
+  stillProcessingVisit:
+    "I'm still going through your visit. I'll message you as soon as I'm done.",
+  visitTakingLong:
+    "Going through your visit is taking longer than usual. Send me any message and I'll check again.",
+  transcriptionFailed: (reason: string): OutboundMessage => ({
+    text: `I couldn't transcribe that recording (${reason}). Please send the voice memo again.`,
+    buttons: [BUTTONS.recordSkip],
+  }),
+  audioNotExpected:
+    "Thanks, but I only use recordings right after you tap Record my visit. Send \"restart\" to start over.",
+  visitNotes: (evidence: { description: string; negated?: boolean }[]): OutboundMessage => ({
+    text:
+      (evidence.length
+        ? `Here's what I noted from your visit: ${listItems(evidence.map(describeEvidence))}.`
+        : "I went through your visit but didn't hear any procedures, tests or medications to check your bill against.") +
+      "\n\nWhen your bill arrives, tap Review my bill and I'll compare it with your visit.",
     buttons: [BUTTONS.reviewBill],
   }),
   readyForBill: (): OutboundMessage => ({

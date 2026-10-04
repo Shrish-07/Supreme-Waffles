@@ -6,12 +6,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   EventLedger,
+  PLATFORM_ID_HEADER,
   PLATFORM_SIGNATURE_HEADER,
   PLATFORM_TIMESTAMP_HEADER,
   SignatureError,
-  hmacHex,
   parsePlatformEvent,
   signCoreEvent,
+  signStandardWebhook,
   verifyPlatformSignature,
 } from "../src/webhook";
 
@@ -25,15 +26,24 @@ describe("signCoreEvent", () => {
 });
 
 describe("verifyPlatformSignature", () => {
-  const secret = "platform-secret";
-  const body = '{"id":"e1"}';
-  const headersFor = (ts: string, sig = hmacHex(secret, `${ts}.${body}`)) => ({
+  const secret = "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw";
+  const body = '{"event_id":"e1"}';
+  const headersFor = (ts: string, sig = signStandardWebhook(secret, "msg_1", ts, body)) => ({
+    [PLATFORM_ID_HEADER]: "msg_1",
     [PLATFORM_TIMESTAMP_HEADER]: ts,
-    [PLATFORM_SIGNATURE_HEADER]: `sha256=${sig}`,
+    [PLATFORM_SIGNATURE_HEADER]: sig,
   });
 
-  it("accepts a fresh valid signature", () => {
+  it("matches the Standard Webhooks reference vector", () => {
+    expect(
+      signStandardWebhook(secret, "msg_p5jXN8AQM9LWM0D4loKWxJek", "1614265330", '{"test": 2432232314}'),
+    ).toBe("v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=");
+  });
+
+  it("accepts a fresh valid signature, including one of several", () => {
     expect(() => verifyPlatformSignature(secret, body, headersFor("1000"), 1100)).not.toThrow();
+    const rotated = headersFor("1000", `v1,b2xk ${signStandardWebhook(secret, "msg_1", "1000", body)}`);
+    expect(() => verifyPlatformSignature(secret, body, rotated, 1000)).not.toThrow();
   });
 
   it("rejects tampering, staleness and missing headers", () => {
@@ -58,6 +68,27 @@ describe("parsePlatformEvent", () => {
         .recordingUrl,
     ).toBe("https://x");
     expect(() => parsePlatformEvent({ type: "message" })).toThrow();
+  });
+
+  it("reads Relay message.received envelopes and ignores other events", () => {
+    const envelope = (eventType: string, direction = "inbound") => ({
+      event_type: eventType,
+      event_id: "evt_1",
+      data: {
+        direction,
+        sender_handle: { handle: "ira" },
+        parts: [{ type: "text", value: "Hi" }],
+      },
+    });
+    expect(parsePlatformEvent(envelope("message.received"))).toEqual({
+      id: "evt_1",
+      kind: "message",
+      from: "ira",
+      text: "Hi",
+    });
+    expect(parsePlatformEvent(envelope("message.sent", "outbound")).kind).toBe("ignored");
+    expect(parsePlatformEvent(envelope("chat.typing_indicator.started")).kind).toBe("ignored");
+    expect(() => parsePlatformEvent({ event_type: "message.received" })).toThrow(/event_id/);
   });
 });
 

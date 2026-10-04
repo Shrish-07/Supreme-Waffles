@@ -11,7 +11,10 @@ export class MockRelayAdapter implements RelayAdapter {
   readonly outbox: SentMessage[] = [];
   private counter = 0;
 
-  constructor(private readonly print = false) {}
+  constructor(
+    private readonly print = false,
+    readonly simulatesRecording = true,
+  ) {}
 
   async sendMessage(to: string, message: OutboundMessage): Promise<{ id: string }> {
     this.outbox.push({ to, message });
