@@ -765,6 +765,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/voice/telnyx/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Telnyx Webhook
+         * @description Signed call events from Telnyx (Ed25519; no bearer token).
+         *
+         *     Headers: ``Telnyx-Timestamp`` (unix seconds) and ``Telnyx-Signature-Ed25519``
+         *     (base64 Ed25519 over ``timestamp`` + raw body; account public key from Mission
+         *     Control). ``call.answered`` for the insurer leg bridges the call to xAI's SIP
+         *     URI (transfer); ``call.hangup`` ends the Core call. Acked 200 per the Telnyx
+         *     delivery contract.
+         */
+        post: operations["telnyx_webhook_voice_telnyx_webhook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/voice/{call_id}": {
         parameters: {
             query?: never;
@@ -3669,6 +3695,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    telnyx_webhook_voice_telnyx_webhook_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
                 };
             };
         };

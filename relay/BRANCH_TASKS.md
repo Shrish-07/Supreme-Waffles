@@ -32,7 +32,7 @@ You own `relay/` (Node 20+ / TypeScript). The service talks **only** to Core's H
    a FinchNode patient (VERIFY).
 5. **Human handoff UX** (`src/handlers/humanHandoff.ts`): handoffs arrive by push while a
    call is paused. Consider a reminder if the patient doesn't tap Done within N minutes, and
-   a "join the call" deep link if Relay/Twilio supports conferencing.
+   a "join the call" deep link if Relay/Telnyx supports conferencing.
 6. Copy polish in `src/ux/messages.ts` (keep button **ids** stable).
 
 ## Env vars

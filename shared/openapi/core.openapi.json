@@ -4434,7 +4434,7 @@
     }
   },
   "info": {
-    "description": "\nClaimShield Core owns the case (single source of truth).\n\n* **Public API** \u2014 used by the Relay service and other clients (Bearer service token).\n* **/internal/tools/** \u2014 used by Fetch agents and the voice manager; scoped per caller.\n* **/relay/webhook** \u2014 signed (HMAC-SHA256) idempotent patient events.\n\nPrototype: synthetic data only, not HIPAA-ready.\n",
+    "description": "\nClaimShield Core owns the case (single source of truth).\n\n* **Public API** \u2014 used by the Relay service and other clients (Bearer service token).\n* **/internal/tools/** \u2014 used by Fetch agents and the voice manager; scoped per caller.\n* **/relay/webhook** \u2014 signed (HMAC-SHA256) idempotent patient events.\n* **/voice/telnyx/webhook** \u2014 signed (Ed25519) Telnyx call events: completes the\n  insurer \u21c4 xAI SIP bridge on ``call.answered``, ends the call on ``call.hangup``.\n\nPrototype: synthetic data only, not HIPAA-ready.\n",
     "title": "ClaimShield Core",
     "version": "0.1.0"
   },
@@ -6426,6 +6426,32 @@
           }
         ],
         "summary": "Start Call",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/voice/telnyx/webhook": {
+      "post": {
+        "description": "Signed call events from Telnyx (Ed25519; no bearer token).\n\nHeaders: ``Telnyx-Timestamp`` (unix seconds) and ``Telnyx-Signature-Ed25519``\n(base64 Ed25519 over ``timestamp`` + raw body; account public key from Mission\nControl). ``call.answered`` for the insurer leg bridges the call to xAI's SIP\nURI (transfer); ``call.hangup`` ends the Core call. Acked 200 per the Telnyx\ndelivery contract.",
+        "operationId": "telnyx_webhook_voice_telnyx_webhook_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Telnyx Webhook Voice Telnyx Webhook Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Telnyx Webhook",
         "tags": [
           "voice"
         ]

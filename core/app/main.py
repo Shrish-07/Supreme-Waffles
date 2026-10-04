@@ -27,6 +27,8 @@ ClaimShield Core owns the case (single source of truth).
 * **Public API** — used by the Relay service and other clients (Bearer service token).
 * **/internal/tools/** — used by Fetch agents and the voice manager; scoped per caller.
 * **/relay/webhook** — signed (HMAC-SHA256) idempotent patient events.
+* **/voice/telnyx/webhook** — signed (Ed25519) Telnyx call events: completes the
+  insurer ⇄ xAI SIP bridge on ``call.answered``, ends the call on ``call.hangup``.
 
 Prototype: synthetic data only, not HIPAA-ready.
 """

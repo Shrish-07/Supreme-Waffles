@@ -82,27 +82,43 @@ Expose the local service with a tunnel (for example `cloudflared tunnel --url ht
 
 ---
 
-## 5. Telephony — Twilio Elastic SIP → xAI SIP (Member 1)
+## 5. Telephony — Telnyx Call Control → xAI SIP (Member 1)
 
 | Step | Env var / flag |
 |---|---|
-| Twilio account SID and auth token | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` |
-| Buy/verify a caller number | `TWILIO_FROM_NUMBER` |
-| Create an Elastic SIP trunk and point its origination/termination at xAI's SIP bridge; copy the SIP URI xAI gives you | `XAI_SIP_URI` (VERIFY format) |
+| Telnyx API v2 key (`KEY…`) | `TELNYX_API_KEY` |
+| Voice API (Call Control) connection ID | `TELNYX_CONNECTION_ID` |
+| Your Telnyx caller number (E.164, owned by the account) | `TELNYX_PHONE_NUMBER` |
+| Ed25519 public key (Mission Control → API Keys → Public key) | `TELNYX_PUBLIC_KEY` |
+| Public HTTPS URL of this Core (e.g. ngrok static domain) | `PUBLIC_BASE_URL` |
+| The SIP URI of xAI's voice bridge | `XAI_SIP_URI` (VERIFY format) |
 | Allowlist **only** your own test line | `TELEPHONY_ALLOWED_NUMBERS=+1…` |
 | Flip the flag | `TELEPHONY_MODE=live` |
 
-How the bridge works (skeleton in `core/app/adapters/telephony/twilio_sip.py`):
+Check credentials without placing a call (read-only, no credits needed):
+`python -m app.adapters.telephony.telnyx_sip --check` (from `core/`) lists the
+connection's active calls.
 
-1. Core asks Twilio's REST API to create an outbound call to the insurer number
-   (must be in the allowlist), with TwiML that `<Dial><Sip>`s the xAI SIP URI and
-   passes `call_id` as a SIP header/parameter.
-2. Media flows insurer ⇄ Twilio ⇄ xAI over SIP; audio never touches Core.
-3. Core keeps a control WebSocket to the xAI realtime session for that call
+How the bridge works (`core/app/adapters/telephony/telnyx_sip.py`):
+
+1. Core POSTs `/v2/calls` (Dial): insurer number as `to` (must be in the
+   allowlist), `from=TELNYX_PHONE_NUMBER`, `client_state=base64(call_id)`,
+   `webhook_url={PUBLIC_BASE_URL}/voice/telnyx/webhook`.
+   Expected webhooks: `call.initiated`, then `call.answered` or `call.hangup`.
+2. On `call.answered` for the insurer leg, Core's webhook route
+   (`POST /voice/telnyx/webhook`, Ed25519-verified — Telnyx does NOT use the
+   service bearer tokens) issues `POST /v2/calls/{call_control_id}/actions/transfer`
+   with `to=<XAI_SIP_URI>` — Telnyx's imperative equivalent of a TwiML
+   `<Dial><Sip>` bridge (Telnyx has no TwiML). Expected webhooks: `call.initiated` (xAI leg), `call.bridged`,
+   `call.answered`/`call.hangup`. **The live path cannot work without this route
+   and a stable `PUBLIC_BASE_URL`** (a free ngrok URL changing breaks the bridge).
+3. Media flows insurer ⇄ Telnyx ⇄ xAI over SIP; audio never touches Core.
+4. Core keeps a control WebSocket to the xAI realtime session for that call
    (instructions, tools, transcripts, tool calls).
-4. Twilio status callbacks → `POST /voice/{call_id}/event` (voice token).
+5. `call.hangup` for the insurer leg ends the Core call (idempotent); the xAI
+   leg (`to=sip:…`) is managed by the control WebSocket.
 
-Fallback if SIP is not available: Twilio Media Streams to a Core WebSocket that
+Fallback if SIP is not available: Telnyx Media Streaming to a Core WebSocket that
 relays μ-law audio to the realtime API (not built; documented as an alternative).
 
 ---
