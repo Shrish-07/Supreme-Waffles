@@ -8,7 +8,7 @@ BIN    := $(VENV)/bin
 PY     := $(BIN)/python
 CORE_PORT ?= 8080
 
-.PHONY: help setup dev dev-local seed test test-py test-node lint fmt openapi ts-types contracts \
+.PHONY: help setup dev dev-local seed reset-demo test test-py test-node lint fmt openapi ts-types contracts \
         smoke agents agents-hello agent-addresses chat relay relay-demo branches clean
 
 help: ## Show available targets
@@ -30,6 +30,9 @@ dev-local: ## Run Core locally on SQLite, no Docker (http://localhost:8080/docs)
 
 seed: ## Load the synthetic demo scenario into the configured database
 	bash scripts/seed.sh
+
+reset-demo: ## Between judges: wipe the demo patient's cases and re-seed a clean one
+	cd core && ../$(PY) -m alembic upgrade head && ../$(PY) -m app.seed.reset_demo
 
 test: test-py test-node ## Run all tests (Python + Node), mock mode
 
