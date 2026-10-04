@@ -59,9 +59,11 @@ class Settings(BaseSettings):
     xai_voice_model: str = ""
     xai_voice_name: str = ""
     telephony_mode: Literal["mock", "live"] = "mock"
-    twilio_account_sid: str = ""
-    twilio_auth_token: str = ""
-    twilio_from_number: str = ""
+    telnyx_api_key: str = ""
+    telnyx_connection_id: str = ""
+    telnyx_phone_number: str = ""
+    telnyx_public_key: str = ""
+    public_base_url: str = ""
     xai_sip_uri: str = ""
     telephony_allowed_numbers: str = "+15555550100"
 
@@ -158,9 +160,11 @@ class Settings(BaseSettings):
         if self.telephony_mode == "live":
             need(
                 "TELEPHONY_MODE=live",
-                ("TWILIO_ACCOUNT_SID", self.twilio_account_sid),
-                ("TWILIO_AUTH_TOKEN", self.twilio_auth_token),
-                ("TWILIO_FROM_NUMBER", self.twilio_from_number),
+                ("TELNYX_API_KEY", self.telnyx_api_key),
+                ("TELNYX_CONNECTION_ID", self.telnyx_connection_id),
+                ("TELNYX_PHONE_NUMBER", self.telnyx_phone_number),
+                ("TELNYX_PUBLIC_KEY", self.telnyx_public_key),
+                ("PUBLIC_BASE_URL", self.public_base_url),
                 ("XAI_SIP_URI", self.xai_sip_uri),
             )
         if self.fetch_mode == "agentverse":

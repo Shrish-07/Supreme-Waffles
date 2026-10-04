@@ -1,4 +1,4 @@
-"""Telephony adapters: mock | live (Twilio Elastic SIP -> xAI SIP)."""
+"""Telephony adapters: mock | live (Telnyx Call Control -> xAI SIP)."""
 
 from ...config import Settings
 from .base import TelephonyAdapter
@@ -6,13 +6,14 @@ from .base import TelephonyAdapter
 
 def build_telephony(settings: Settings) -> TelephonyAdapter:
     if settings.telephony_mode == "live":
-        from .twilio_sip import TwilioSipTelephony
+        from .telnyx_sip import TelnyxSipTelephony
 
-        return TwilioSipTelephony(
-            account_sid=settings.twilio_account_sid,
-            auth_token=settings.twilio_auth_token,
-            from_number=settings.twilio_from_number,
+        return TelnyxSipTelephony(
+            api_key=settings.telnyx_api_key,
+            connection_id=settings.telnyx_connection_id,
+            from_number=settings.telnyx_phone_number,
             sip_uri=settings.xai_sip_uri,
+            public_base_url=settings.public_base_url,
             allowed=settings.allowed_numbers(),
         )
     from .mock import MockTelephony

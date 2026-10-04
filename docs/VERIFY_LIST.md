@@ -60,14 +60,16 @@ Legend: ☐ = still to verify · ☑ = verified while building the scaffold (how
 | ☐ | Event names: input transcription completed, output transcript done, function-call arguments done, error | `core/app/adapters/xai_voice/live.py:36` |
 | ☐ | Function-call result format (`conversation.item.create` + `function_call_output`) and `response.create` | `core/app/adapters/xai_voice/live.py` |
 | ☐ | How to force an exact utterance / interrupt (`response.cancel`, per-response instructions) | `core/app/adapters/xai_voice/live.py:178` |
-| ☐ | SIP: whether xAI exposes a SIP endpoint, its URI format, how a call id is passed, and how the control WebSocket attaches to a SIP call | `core/app/adapters/telephony/twilio_sip.py:3,47`, `XAI_SIP_URI` |
+| ☐ | SIP: whether xAI exposes a SIP endpoint, its URI format, how a call id is passed (transfer `headers`), and how the control WebSocket attaches to a SIP call | `core/app/adapters/telephony/telnyx_sip.py`, `XAI_SIP_URI` |
 
-## Twilio (Member 1)
+## Telnyx (Member 1)
 
 | | Item | Where |
 |---|---|---|
-| ☐ | `<Dial><Sip>` to an external SIP URI from an Elastic SIP trunk / programmable voice number | `core/app/adapters/telephony/twilio_sip.py` |
-| ☐ | Status callbacks: form-encoded + `X-Twilio-Signature` validation → needs a dedicated route (TODO noted) | `core/app/adapters/telephony/twilio_sip.py` docstring |
+| ☐ | Voice API connection type (numeric id ↔ Call Control application), `to` as E.164, `client_state` echoed on webhooks | `core/app/adapters/telephony/telnyx_sip.py`, `TELNYX_CONNECTION_ID` |
+| ☐ | `transfer` to an external `sip:` URI: `headers` (custom SIP headers) accepted, `call.bridged` semantics (insurer leg ↔ xAI leg) | `core/app/adapters/telephony/telnyx_sip.py` |
+| ☐ | Webhook signed-payload format exactly matches telnyx-python's verification (`timestamp` + raw body, Ed25519, base64) | `core/app/adapters/telephony/webhook_signature.py`, `TELNYX_PUBLIC_KEY` in Mission Control → API keys |
+| ☐ | `PUBLIC_BASE_URL` stability (free ngrok URLs can change; webhook_url is set per call at dial time) | `.env` |
 
 ## Ollama / Qwen3 (Member 4)
 

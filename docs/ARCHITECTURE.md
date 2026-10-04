@@ -32,7 +32,7 @@ flowchart LR
     libs["Libraries: intelligence/ + finchnode/<br/>(pure Python, no DB)"]
     finch[(FinchNode)]
     xai[xAI Grok Voice]
-    sip[Twilio Elastic SIP]
+    sip[Telnyx Call Control]
     insurer((Insurer rep))
 
     patient --> asi1 --> orch

@@ -40,7 +40,7 @@ flowchart LR
     O & V & C & D -- HTTPS tools --> CORE["Core (owns the case)<br/>core/"]
     R -- HTTPS --> CORE
     CORE --> FN[(FinchNode)]
-    CORE --> VOICE[xAI Grok Voice] --> SIP[Twilio SIP] --> INS((Insurer))
+    CORE --> VOICE[xAI Grok Voice] --> SIP[Telnyx Call Control] --> INS((Insurer))
     CORE -. notifications .-> R
 ```
 
@@ -78,7 +78,7 @@ Each branch folder has a `BRANCH_TASKS.md` (`relay/`, `fetch/`, `finchnode/`, `i
 | `RELAY_MODE` | `mock` · `live` (Relay service) | M2 |
 | `NOTIFY_MODE` | `outbox` · `relay_service` (Core → Relay service) | M1/M2 |
 | `XAI_VOICE_MODE` | `mock` · `live` | M1 |
-| `TELEPHONY_MODE` | `mock` · `live` (Twilio SIP) | M1 |
+| `TELEPHONY_MODE` | `mock` · `live` (Telnyx Call Control → xAI SIP) | M1 |
 
 A live flag without its keys stops startup with a message naming the missing variable.
 
@@ -95,9 +95,9 @@ A live flag without its keys stops startup with a message naming the missing var
 
 ## Main branch next steps (Member 1)
 
-1. Build-order step 9: xAI realtime (`core/app/adapters/xai_voice/live.py`) + Twilio SIP
-   (`core/app/adapters/telephony/twilio_sip.py`), working through `docs/VERIFY_LIST.md`; add a
-   Twilio-signature-validated status callback route.
+1. Build-order step 9: xAI realtime (`core/app/adapters/xai_voice/live.py`) + Telnyx Call
+   Control (`core/app/adapters/telephony/telnyx_sip.py`), working through `docs/VERIFY_LIST.md`;
+   the insurer ⇄ xAI bridge completes on the Ed25519-verified `/voice/telnyx/webhook` route.
 2. Build-order step 10, with Member 2: human takeover (join/transfer the call instead of
    "verify directly then tap Done").
 3. Merge branch PRs, keep contracts and generated files in sync (`make contracts`), keep CI green.
