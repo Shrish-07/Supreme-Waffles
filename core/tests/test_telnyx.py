@@ -4,6 +4,7 @@ import base64
 import json
 import time
 from collections.abc import Callable
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import httpx
@@ -14,6 +15,7 @@ from nacl.signing import SigningKey
 from app.adapters.telephony.telnyx_sip import (
     TelnyxSipTelephony,
     from_client_state,
+    human_client_state,
     to_client_state,
 )
 from app.adapters.telephony.webhook_signature import (
@@ -22,6 +24,7 @@ from app.adapters.telephony.webhook_signature import (
 )
 from app.demo_support import build_isolated_app, clean_env
 from app.errors import SafetyBlocked, UpstreamError
+from app.models_db import CallRow, CaseRow, ClaimRow, DisputeRow
 
 
 @pytest.fixture
@@ -198,6 +201,7 @@ def _stub_live_telephony(app, monkeypatch: pytest.MonkeyPatch) -> dict:
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["path"] = request.url.path
+        captured["body"] = json.loads(request.content) if request.content else {}
         return httpx.Response(200, json={"data": {}})
 
     adapter = TelnyxSipTelephony(
@@ -350,3 +354,140 @@ def test_live_telephony_requires_public_key_only_when_verifying():
         on = Settings(**base)
     expected = "TELEPHONY_MODE=live requires TELNYX_PUBLIC_KEY"
     assert expected in on.missing_live_settings()
+
+
+# ------------------------------------------------------------------ fallback profiles
+
+
+def _rotating_adapter(handler) -> TelnyxSipTelephony:
+    transport = httpx.MockTransport(handler)
+    return TelnyxSipTelephony(
+        api_key="KEY_bad",
+        connection_id="c1",
+        from_number="+10000000001",
+        sip_uri="sip:test@sip.x.ai",
+        public_base_url="https://public.example.ngrok-free.dev",
+        allowed=frozenset({"+15555550100"}),
+        http=httpx.Client(transport=transport),
+        fallbacks=(("KEY_good", "c2", "+10000000002"),),
+        fallback_clients=(httpx.Client(transport=transport),),
+    )
+
+
+def test_rotation_retries_on_auth_failure_and_sticks() -> None:
+    auths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        auths.append(request.headers["authorization"])
+        if auths[-1] == "Bearer KEY_bad":
+            return httpx.Response(402, json={"errors": []})
+        return httpx.Response(200, json={"data": {"call_control_id": "cc_ok"}})
+
+    adapter = _rotating_adapter(handler)
+    assert adapter.dial("call_r", "+15555550100").provider_call_ref == "cc_ok"
+    adapter.hangup("cc_ok")  # the working profile stays active
+    assert auths == ["Bearer KEY_bad", "Bearer KEY_good", "Bearer KEY_good"]
+
+
+def test_rotation_raises_when_every_profile_is_exhausted() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(402, json={"errors": []})
+
+    with pytest.raises(UpstreamError):
+        _rotating_adapter(handler).dial("call_r", "+15555550100")
+
+
+# ------------------------------------------------------------------ human leg webhooks
+
+
+def _seeded_call(app) -> None:  # parents first, one commit each (SQLite FK order)
+    rows = [
+        CaseRow(
+            id="case_x",
+            state="HUMAN_REQUIRED",
+            channel="relay",
+            finchnode_patient_id="fn_pat_demo_001",
+        ),
+        ClaimRow(
+            id="clm_x",
+            case_id="case_x",
+            external_claim_id="CLM-X-001",
+            date_of_service=date(2026, 1, 1),
+            total_billed_cents=100,
+            source="finchnode",
+            received_at=datetime.now(UTC),
+        ),
+        DisputeRow(
+            id="dsp_x",
+            case_id="case_x",
+            claim_id="clm_x",
+            status="approved",
+            items=[],
+            total_disputed_cents=0,
+            letter_text="Demo dispute letter.",
+        ),
+        CallRow(
+            id="call_123",
+            case_id="case_x",
+            dispute_id="dsp_x",
+            status="paused_for_human",
+            provider_call_ref="cc_insurer",
+            turns=[],
+        ),
+    ]
+    for row in rows:
+        with app.state.container.session_scope() as db:
+            db.add(row)
+
+
+def test_human_leg_answered_is_bridged_into_the_insurer_call(
+    tmp_path: Path, telnyx_keys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    signing_key, public_key = telnyx_keys
+    app = build_isolated_app(tmp_path / "core.db", telnyx_public_key=public_key)
+    _seeded_call(app)
+    captured = _stub_live_telephony(app, monkeypatch)
+    body = _event_body(
+        "call.answered",
+        to="+15555550199",
+        call_control_id="cc_human",
+        client_state=human_client_state("call_123"),
+    )
+    response = _post_event(app, signing_key, body)
+    assert response.json() == {"received": True}
+    assert captured["path"] == "/v2/calls/cc_human/actions/bridge"
+    assert captured["body"]["bridge_call_control_id"] == "cc_insurer"
+    with app.state.container.session_scope() as db:
+        assert db.get(CallRow, "call_123").human_call_ref == "cc_human"
+
+
+def test_human_leg_hangup_releases_the_merge_without_ending_the_call(
+    tmp_path: Path, telnyx_keys
+) -> None:
+    signing_key, public_key = telnyx_keys
+    app = build_isolated_app(tmp_path / "core.db", telnyx_public_key=public_key)
+    _seeded_call(app)
+    with app.state.container.session_scope() as db:
+        db.get(CallRow, "call_123").human_call_ref = "cc_human"
+    body = _event_body(
+        "call.hangup",
+        to="+15555550199",
+        call_control_id="cc_human",
+        client_state=human_client_state("call_123"),
+    )
+    assert _post_event(app, signing_key, body).json() == {"received": True}
+    with app.state.container.session_scope() as db:
+        call = db.get(CallRow, "call_123")
+        assert call.human_call_ref is None and call.ended_at is None
+
+
+def test_human_leg_events_are_ignored_with_a_mock_adapter(tmp_path: Path, telnyx_keys) -> None:
+    signing_key, public_key = telnyx_keys
+    app = build_isolated_app(tmp_path / "core.db", telnyx_public_key=public_key)
+    body = _event_body(
+        "call.answered",
+        to="+15555550199",
+        call_control_id="cc_human",
+        client_state=human_client_state("call_123"),
+    )
+    assert _post_event(app, signing_key, body).json() == {"received": False}

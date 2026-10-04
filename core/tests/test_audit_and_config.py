@@ -93,3 +93,20 @@ def test_isolated_apps_ignore_a_configured_repo_env(
     app = build_isolated_app(tmp_path / "core.db")
     assert app.state.container.finchnode.mode == "mock"
     assert os.environ["FINCHNODE_MODE"] == "sandbox"  # clean_env() restored it
+
+
+def test_a_partial_telnyx_fallback_profile_is_named() -> None:
+    """Fallback Telnyx profiles must be complete key + connection + number triplets."""
+    settings = _settings(
+        telephony_mode="live",
+        telnyx_api_key="K",
+        telnyx_connection_id="c1",
+        telnyx_phone_number="+15555550199",
+        public_base_url="https://example.ngrok-free.dev",
+        xai_sip_uri="sip:test@sip.x.ai",
+        telnyx_webhook_verify=False,
+        telnyx_api_key_2="KEY_v2",
+        telnyx_phone_number_2="+10000000002",
+    )  # TELNYX_CONNECTION_ID_2 missing
+    with pytest.raises(ConfigError, match="TELNYX_CONNECTION_ID_2"):
+        settings.validate_for_startup()

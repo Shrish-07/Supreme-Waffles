@@ -27,10 +27,11 @@ from typing import TYPE_CHECKING
 from claimshield_contracts.api import VoiceEventIn
 from claimshield_contracts.enums import VoiceEventType
 
-from ..adapters.telephony.telnyx_sip import TelnyxSipTelephony, from_client_state
+from ..adapters.telephony.telnyx_sip import TelnyxSipTelephony, split_client_state
 from ..adapters.telephony.webhook_signature import verify_telnyx_signature
 from ..audit import record_audit
 from ..errors import DomainError, InvalidInput, NotFound
+from ..models_db import CallRow
 
 if TYPE_CHECKING:
     from ..container import Container
@@ -68,15 +69,23 @@ def process_telnyx_event(
         container,
         str(data.get("event_type") or ""),
         payload,
-        from_client_state(payload.get("client_state")),
+        payload.get("client_state"),
     )
     return {"received": handled}
 
 
-def _dispatch(container: "Container", event_type: str, payload: dict, call_id: str | None) -> bool:
+def _dispatch(container: "Container", event_type: str, payload: dict, client_state: object) -> bool:
     to = str(payload.get("to") or "")
     if to.startswith("sip:"):
         return False  # the xAI leg: manages itself via the control WebSocket
+    state = client_state if isinstance(client_state, str) else None
+    call_id, is_human = split_client_state(state)
+    if is_human:
+        if event_type == "call.answered":
+            return _bridge_human_leg(container, payload.get("call_control_id"), call_id)
+        if event_type == "call.hangup":
+            return _clear_human_leg(container, call_id)
+        return False
     if event_type == "call.hangup":
         return _end_call(container, call_id)
     if event_type != "call.answered":
@@ -124,4 +133,56 @@ def _end_call(container: "Container", call_id: str | None) -> bool:
     except NotFound:
         log.warning("hangup for unknown call; ignoring", extra={"fields": {"call_id": call_id}})
         return False
+    return True
+
+
+def _bridge_human_leg(container: "Container", call_control_id: object, call_id: str | None) -> bool:
+    """A human dialed for a handoff just answered: bridge them into the call."""
+    adapter = container.telephony
+    if not isinstance(adapter, TelnyxSipTelephony) or not call_control_id or call_id is None:
+        log.warning("human call.answered without live telephony/client_state; ignoring")
+        return False
+    with container.session_scope() as db:
+        call = db.get(CallRow, call_id)
+        if call is None:
+            log.warning("human leg answered for an unknown call")
+            return False
+        insurer_ref = call.provider_call_ref
+        call.human_call_ref = str(call_control_id)
+    if not insurer_ref:
+        log.warning("human answered but the call has no insurer leg to bridge to")
+        return False
+    try:
+        adapter.bridge_calls(str(call_control_id), insurer_ref)
+    except DomainError as exc:
+        log.warning("human bridge failed", extra={"fields": {"call_id": call_id, "code": exc.code}})
+        return True  # ack anyway: Telnyx would only retry the same failure
+    with container.session_scope() as db:
+        record_audit(
+            db,
+            actor=ACTOR,
+            action="voice.human_bridged",
+            resource_type="call",
+            resource_id=call_id,
+            details={"call_control_id": str(call_control_id)},
+        )
+    return True
+
+
+def _clear_human_leg(container: "Container", call_id: str | None) -> bool:
+    """The human hung up: release the merge; the call stays paused until DONE."""
+    if call_id is None:
+        return False
+    with container.session_scope() as db:
+        call = db.get(CallRow, call_id)
+        if call is None or call.human_call_ref is None:
+            return False
+        call.human_call_ref = None
+        record_audit(
+            db,
+            actor=ACTOR,
+            action="voice.human_leg_ended",
+            resource_type="call",
+            resource_id=call_id,
+        )
     return True

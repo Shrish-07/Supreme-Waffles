@@ -76,6 +76,17 @@ class Settings(BaseSettings):
     public_base_url: str = ""
     xai_sip_uri: str = ""
     telephony_allowed_numbers: str = "+15555550100"
+    # Human merge: a handoff (SSN/PIN request...) dials this phone and
+    # bridges the human into the call. Must also be in TELEPHONY_ALLOWED_NUMBERS.
+    human_handoff_phone: str = ""
+    # Fallback Telnyx accounts, used in order when the primary is rejected
+    # (auth/credit). Each must be a complete key + connection + number triplet.
+    telnyx_api_key_2: str = ""
+    telnyx_connection_id_2: str = ""
+    telnyx_phone_number_2: str = ""
+    telnyx_api_key_3: str = ""
+    telnyx_connection_id_3: str = ""
+    telnyx_phone_number_3: str = ""
 
     # --- fetch
     fetch_mode: Literal["local_direct", "agentverse"] = "local_direct"
@@ -119,6 +130,17 @@ class Settings(BaseSettings):
 
     def allowed_numbers(self) -> frozenset[str]:
         return frozenset(n.strip() for n in self.telephony_allowed_numbers.split(",") if n.strip())
+
+    def telnyx_fallback_profiles(self) -> tuple[tuple[str, str, str], ...]:
+        """Complete (API key, connection id, caller number) fallback triplets."""
+        profiles: list[tuple[str, str, str]] = []
+        for key, connection_id, phone in (
+            (self.telnyx_api_key_2, self.telnyx_connection_id_2, self.telnyx_phone_number_2),
+            (self.telnyx_api_key_3, self.telnyx_connection_id_3, self.telnyx_phone_number_3),
+        ):
+            if key and connection_id and phone:
+                profiles.append((key, connection_id, phone))
+        return tuple(profiles)
 
     def modes(self) -> dict[str, str]:
         return {
@@ -178,6 +200,21 @@ class Settings(BaseSettings):
             if self.telnyx_webhook_verify:
                 live_pairs.append(("TELNYX_PUBLIC_KEY", self.telnyx_public_key))
             need("TELEPHONY_MODE=live", *live_pairs)
+            for marker in ("2", "3"):
+                parts = [
+                    (f"TELNYX_API_KEY_{marker}", getattr(self, f"telnyx_api_key_{marker}")),
+                    (
+                        f"TELNYX_CONNECTION_ID_{marker}",
+                        getattr(self, f"telnyx_connection_id_{marker}"),
+                    ),
+                    (
+                        f"TELNYX_PHONE_NUMBER_{marker}",
+                        getattr(self, f"telnyx_phone_number_{marker}"),
+                    ),
+                ]
+                if any(value for _, value in parts) and not all(value for _, value in parts):
+                    names = ", ".join(name for name, value in parts if not value)
+                    missing.append(f"partial Telnyx fallback profile: missing {names}")
         if self.fetch_mode == "agentverse":
             need("FETCH_MODE=agentverse", ("ORCHESTRATOR_URL", self.orchestrator_url))
         if self.extraction_mode == "ollama":

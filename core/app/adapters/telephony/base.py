@@ -22,6 +22,16 @@ class TelephonyAdapter(ABC):
     @abstractmethod
     def hangup(self, provider_call_ref: str) -> None: ...
 
+    def dial_human(
+        self, call_id: str, to_number: str, insurer_ref: str | None = None
+    ) -> DialResult | None:
+        """Dial a human to merge them into the paused call. None = unsupported."""
+        return None
+
+    def bridge_calls(self, human_ref: str, insurer_ref: str) -> None:
+        """Join two call legs into one call. Default: unsupported."""
+        return None
+
 
 def ensure_allowed(number: str, allowed: frozenset[str]) -> None:
     """Second line of defense for the dial allowlist (VoiceCallManager checks first)."""

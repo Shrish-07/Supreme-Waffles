@@ -1,13 +1,21 @@
 """Mock voice call: SSN handoff, injected sensitive requests, guardrails, allowlist."""
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.xai_voice.dispatcher import ToolCallDispatcher
-from app.demo_support import APPROVAL_TEXT
+from app.demo_support import (
+    APPROVAL_TEXT,
+    answer_open_questions,
+    build_isolated_app,
+    create_demo_visit,
+    service_headers,
+)
 from app.models_db import CallRow, CaseRow, InterventionRow
+from claimshield_contracts.enums import ServiceName
 from claimshield_contracts.tool_api import ToolName
 
 APPROVAL = {"channel": "relay", "authorization_text": APPROVAL_TEXT, "authorize_call": True}
@@ -220,3 +228,68 @@ def test_insurer_notes_with_an_ssn_are_rejected(
         headers=voice,
     )
     assert response.status_code == 422 and "123-45-6789" not in response.text
+
+
+# ------------------------------------------------------------------ human merge
+
+
+def _ready_to_call(tmp_path: Path):
+    """A fresh case, fully approved, with HUMAN_HANDOFF_PHONE configured."""
+    app = build_isolated_app(
+        tmp_path / "merge.db",
+        human_handoff_phone="+15555550199",
+        telephony_allowed_numbers="+15555550100,+15555550199",
+    )
+    client = TestClient(app)
+    relay = service_headers(app.state.container.settings, ServiceName.RELAY)
+    setup = create_demo_visit(client, relay)
+    claim = client.post(
+        "/claims",
+        json={
+            "case_id": setup["case_id"],
+            "source": "finchnode",
+            "finchnode_claim_id": "CLM-2026-0915-001",
+        },
+        headers=relay,
+    ).json()
+    client.post(f"/claims/{claim['claim_id']}/analyze", headers=relay)
+    answer_open_questions(client, relay, setup["case_id"])
+    prepared = client.post("/disputes", json={"case_id": setup["case_id"]}, headers=relay).json()
+    client.post(
+        f"/disputes/{prepared['dispute']['dispute_id']}/approve", json=APPROVAL, headers=relay
+    )
+    return app, client, relay, setup
+
+
+def test_a_paused_call_dials_bridges_and_releases_the_human(tmp_path: Path) -> None:
+    """HUMAN_HANDOFF_PHONE set: the SSN pause dials the human (mock: bridged
+    instantly); DONE hangs the human up first, then the insurer call finishes."""
+    app, client, relay, setup = _ready_to_call(tmp_path)
+    call = client.post("/voice/start", json={"case_id": setup["case_id"]}, headers=relay).json()
+    call_id = call["call_id"]
+    telephony = app.state.container.telephony
+    assert call["status"] == "paused_for_human"
+    assert telephony.human_dialed == [call_id]
+    assert telephony.bridged == [(f"MOCK-HU-{call_id[-8:]}", f"MOCK-CA-{call_id[-8:]}")]
+    resolved = client.post(
+        f"/human-intervention/{call['open_intervention_id']}/resolve",
+        json={"choice": "DONE", "channel": "relay"},
+        headers=relay,
+    ).json()
+    assert resolved["case_state"] == "RESOLVED"
+    assert telephony.hung_up[0] == f"MOCK-HU-{call_id[-8:]}"  # the human leaves first
+
+
+def test_a_failed_human_dial_still_pauses_the_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the human cannot be dialed, the proven pause-only flow continues."""
+    app, client, relay, setup = _ready_to_call(tmp_path)
+
+    def boom(call_id, to_number, insurer_ref=None):
+        raise RuntimeError("audio lines are busy")
+
+    monkeypatch.setattr(app.state.container.telephony, "dial_human", boom)
+    call = client.post("/voice/start", json={"case_id": setup["case_id"]}, headers=relay).json()
+    assert call["status"] == "paused_for_human"
+    assert app.state.container.telephony.human_dialed == []

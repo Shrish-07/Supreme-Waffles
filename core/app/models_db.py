@@ -237,6 +237,8 @@ class CallRow(Base):
     dispute_id: Mapped[str] = mapped_column(ForeignKey("disputes.id"))
     status: Mapped[str] = mapped_column(String(32))
     provider_call_ref: Mapped[str | None] = mapped_column(String(120))
+    # The dialed-and-bridged human leg of a paused call (None when no merge).
+    human_call_ref: Mapped[str | None] = mapped_column(String(120))
     to_number_masked: Mapped[str | None] = mapped_column(String(32))
     turns: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     insurer_response: Mapped[dict[str, Any] | None] = mapped_column(JSON)

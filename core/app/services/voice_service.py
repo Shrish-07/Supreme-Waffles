@@ -235,6 +235,10 @@ class VoiceCallManager:
                 or call.status != CallStatus.PAUSED_FOR_HUMAN.value
             ):
                 return
+            human_ref = call.human_call_ref
+            call.human_call_ref = None
+            if human_ref:
+                _append_turn(call, CallSpeaker.SYSTEM, "The human left the call.")
             case = get_case_row(db, call.case_id)
             call.status = CallStatus.IN_PROGRESS.value
             call.open_intervention_id = None
@@ -242,6 +246,8 @@ class VoiceCallManager:
                 call, CallSpeaker.HUMAN, "Member verified directly with the representative."
             )
             transition(db, case, CaseState.CALL_IN_PROGRESS, actor=actor)
+        if human_ref:
+            self._quiet_hangup(human_ref)
         try:
             self._c.voice.resume_session(call_id, self)
         except Exception as exc:
@@ -252,7 +258,10 @@ class VoiceCallManager:
     def cancel_after_human(self, call_id: str, *, actor: str) -> None:
         """Called after a call-linked intervention resolves with CANCEL."""
         with self._c.session_scope() as db:
-            ref = _get_call(db, call_id).provider_call_ref
+            call_row = _get_call(db, call_id)
+            ref = call_row.provider_call_ref
+            human_ref = call_row.human_call_ref
+            call_row.human_call_ref = None
         try:
             self._c.voice.end_session(call_id, "cancelled by patient")
         except Exception:
@@ -260,6 +269,7 @@ class VoiceCallManager:
                 "voice session did not end cleanly", extra={"fields": {"call_id": call_id}}
             )
         finally:
+            self._quiet_hangup(human_ref)
             self._quiet_hangup(ref)
             self.on_call_ended(call_id, "cancelled by patient")
 
@@ -287,8 +297,10 @@ class VoiceCallManager:
             if call.status != CallStatus.IN_PROGRESS.value:
                 raise Conflict("The call is not in progress.", code="call_not_active")
             row = self._pause_for_human(db, call, reason=reason, prompt=detail, actor=actor)
+            insurer_ref = call.provider_call_ref
             result = mappers.intervention_to_model(row)
         self._c.voice.pause_session(call_id)
+        self._maybe_dial_human(call_id, insurer_ref)
         return result
 
     def handle_event(self, call_id: str, event: VoiceEventIn, *, actor: str) -> VoiceEventResult:
@@ -327,11 +339,14 @@ class VoiceCallManager:
                 prompt=SENSITIVE_PROMPTS.get(sensitive.category, "The representative needs you."),
                 actor="core:security_policy",
             )
-            return TurnDecision(
-                action=TurnAction.PAUSE_FOR_HUMAN,
-                say=HOLD_LINE,
-                intervention_id=row.id,
-            )
+            insurer_ref = call.provider_call_ref
+            intervention_id = row.id
+        self._maybe_dial_human(call_id, insurer_ref)
+        return TurnDecision(
+            action=TurnAction.PAUSE_FOR_HUMAN,
+            say=HOLD_LINE,
+            intervention_id=intervention_id,
+        )
 
     def on_agent_utterance(self, call_id: str, text: str) -> GuardrailVerdict:
         with self._c.session_scope() as db:
@@ -364,6 +379,31 @@ class VoiceCallManager:
 
     def on_call_ended(self, call_id: str, reason: str) -> None:
         self._end(call_id, reason, failed=False)
+
+    def _maybe_dial_human(self, call_id: str, insurer_ref: str | None) -> None:
+        """Merge the human into the paused call: dial HUMAN_HANDOFF_PHONE as a
+        second leg. Live telephony bridges them on the human's call.answered
+        webhook; the mock answers instantly. Never breaks the handoff: any
+        failure leaves the proven pause-only flow."""
+        number = self._c.settings.human_handoff_phone
+        if not number or not insurer_ref:
+            return
+        try:
+            result = self._c.telephony.dial_human(call_id, number, insurer_ref)
+        except Exception:
+            log.exception(
+                "human merge dial failed; the call stays paused-only",
+                extra={"fields": {"call_id": call_id}},
+            )
+            return
+        if result is None:  # adapter does not support a parallel human leg
+            return
+        with self._c.session_scope() as db:
+            call = _get_call(db, call_id)
+            call.human_call_ref = result.provider_call_ref
+            _append_turn(
+                call, CallSpeaker.SYSTEM, f"Dialed a human into the call ({mask_phone(number)})."
+            )
 
     # ------------------------------------------------------------------ internals
 
