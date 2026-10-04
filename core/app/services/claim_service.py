@@ -113,6 +113,7 @@ def ingest_claim(
         source=source.value,
     )
     db.add(claim)
+    db.flush()  # parent row first: tables have FKs but no ORM relationships
     db.add_all(
         ClaimLineRow(
             id=new_id("line"),

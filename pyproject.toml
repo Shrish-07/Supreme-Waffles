@@ -46,6 +46,8 @@ known-first-party = ["app", "claimshield_contracts", "intelligence", "finchnode"
 
 [tool.pytest.ini_options]
 addopts = "-q --import-mode=importlib"
+# uagents-core pins httpx<0.29, so Starlette's TestClient httpx warning is expected.
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
 testpaths = [
   "shared/python/tests",
   "core/tests",
