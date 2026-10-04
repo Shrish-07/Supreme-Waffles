@@ -17,7 +17,7 @@ case's `health_data_access` consent. Agents reach the data through Core's tools
 ## To implement for LIVE (build-order step 3: demo → sandbox)
 
 1. Confirm endpoints, auth, envelope and paging against FinchNode docs (`client.py`, all `VERIFY`).
-2. `FINCHNODE_MODE=demo`: point `FINCHNODE_BASE_URL` at the keyless demo; run the CLI check; adjust `normalize.py` to the real payloads.
+2. `FINCHNODE_MODE=demo`: verified base URL `https://api.finchnode.com/demo/v1` (no API key). FHIR reads use `/fhir/Patient/{id}` and `/fhir/{type}?patient={id}`. The sample bill is an ExplanationOfBenefit, so a Claim 404 falls back to that.
 3. `FINCHNODE_MODE=sandbox`: `FINCHNODE_API_KEY=ck_test_…`; same check.
 4. Add fixtures that mirror real payloads (still synthetic) so mock mode stays realistic.
 5. Optional: `mcp_optional.md`, only if FinchNode's MCP server adds value.

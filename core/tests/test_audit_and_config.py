@@ -52,7 +52,6 @@ def test_default_settings_are_all_mock_and_valid() -> None:
         ({"xai_voice_mode": "live"}, "XAI_API_KEY"),
         ({"telephony_mode": "live"}, "TWILIO_ACCOUNT_SID"),
         ({"finchnode_mode": "sandbox"}, "FINCHNODE_API_KEY"),
-        ({"finchnode_mode": "demo"}, "FINCHNODE_BASE_URL"),
         ({"notify_mode": "relay_service", "relay_service_url": ""}, "RELAY_SERVICE_URL"),
         ({"app_env": "prod"}, "RELAY_SERVICE_TOKEN"),
     ],
