@@ -50,6 +50,16 @@ def test_sandbox_sends_bearer_and_follows_pages() -> None:
     assert seen[0].url.params["patient"] == "p1"
 
 
+def test_demo_uses_the_public_fake_api_and_rejects_a_key() -> None:
+    from finchnode.client import DEMO_BASE_URL
+
+    with pytest.raises(ValueError, match="no API key"):
+        HttpFinchNodeClient(mode="demo", base_url="https://finchnode.test", api_key="ck_test_abc")
+    client = HttpFinchNodeClient(mode="demo", base_url="")
+    assert str(client._http.base_url).rstrip("/") == DEMO_BASE_URL
+    client._http.close()
+
+
 def test_demo_mode_is_keyless_and_retries_5xx() -> None:
     calls = {"n": 0}
 

@@ -140,8 +140,7 @@ class Settings(BaseSettings):
         def need(flag: str, *pairs: tuple[str, str]) -> None:
             missing.extend(f"{flag} requires {name}" for name, value in pairs if not value)
 
-        if self.finchnode_mode == "demo":
-            need("FINCHNODE_MODE=demo", ("FINCHNODE_BASE_URL", self.finchnode_base_url))
+        # demo is the public fake API and has a built-in base URL. No key.
         if self.finchnode_mode == "sandbox":
             need(
                 "FINCHNODE_MODE=sandbox",

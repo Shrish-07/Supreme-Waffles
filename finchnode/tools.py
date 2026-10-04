@@ -11,7 +11,7 @@ from claimshield_contracts.models import Claim, HealthRecord, PatientRef
 from .client import FinchNodeClient
 from .normalize import normalize_claim, normalize_patient, normalize_records
 
-MEDICATION_RESOURCES = ("MedicationAdministration",)
+MEDICATION_RESOURCES = ("MedicationAdministration", "MedicationRequest")
 
 
 def get_patient_profile(client: FinchNodeClient, patient_id: str) -> PatientRef | None:

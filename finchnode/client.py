@@ -1,10 +1,16 @@
-"""FinchNode clients: MOCK (local fixtures) | DEMO (keyless synthetic API) | SANDBOX (bearer key).
+"""FinchNode clients: MOCK (local fixtures) | DEMO (public fake API, no key).
 
 Only Core calls these (through core/app/adapters/finchnode). Agents never do.
 
-# VERIFY against current docs: base URLs, endpoint paths, auth header, response
-# envelope (FHIR R4 Bundles are assumed), pagination links and the sandbox key
-# prefix (``ck_test_``). All of it is isolated in HttpFinchNodeClient below.
+The access this team was given is the public synthetic demo. Verified 2026-10-04:
+
+    https://api.finchnode.com/demo/v1/fhir/Patient/patient-demo-001
+    https://api.finchnode.com/demo/v1/fhir/{resourceType}?patient=patient-demo-001
+    https://api.finchnode.com/demo/v1/users/patient-demo-001/records
+
+Those URLs return fictional records and do not accept an API key. Sandbox mode
+remains in this file for a later FinchNode application; it is not the current
+access, and demo mode refuses a key instead of sending one.
 
 CLI (prints normalized records):
     python -m finchnode.client --patient fn_pat_demo_001 [--mode mock|demo|sandbox]
@@ -30,7 +36,9 @@ RESOURCE_FILES = {
     "MedicationAdministration": "medications.json",
     "Claim": "claims.json",
 }
-SANDBOX_KEY_PREFIX = "ck_test_"  # VERIFY against current docs
+# Public fake demo. No account, no API key.
+DEMO_BASE_URL = "https://api.finchnode.com/demo/v1"
+SANDBOX_KEY_PREFIX = "ck_test_"
 
 
 class FinchNodeError(RuntimeError):
@@ -71,10 +79,10 @@ class FixtureClient:
 
 
 class HttpFinchNodeClient:
-    """DEMO / SANDBOX mode over HTTPS with retries. # VERIFY against current docs."""
+    """DEMO (keyless fake API) or SANDBOX over HTTPS, with retries."""
 
-    PATIENT_PATH = "/fhir/Patient/{patient_id}"  # VERIFY
-    SEARCH_PATH = "/fhir/{resource_type}"  # VERIFY (patient=<id> query parameter)
+    PATIENT_PATH = "/fhir/Patient/{patient_id}"
+    SEARCH_PATH = "/fhir/{resource_type}"
 
     def __init__(
         self,
@@ -88,7 +96,14 @@ class HttpFinchNodeClient:
     ) -> None:
         if mode not in ("demo", "sandbox"):
             raise ValueError(f"HttpFinchNodeClient supports demo|sandbox, not {mode!r}")
-        if not base_url:
+        if mode == "demo":
+            if api_key:
+                raise ValueError(
+                    "The FinchNode demo is public fake data and has no API key. "
+                    "Unset FINCHNODE_API_KEY."
+                )
+            base_url = base_url or DEMO_BASE_URL
+        elif not base_url:
             raise ValueError(f"FINCHNODE_MODE={mode} requires FINCHNODE_BASE_URL")
         if mode == "sandbox":
             if not api_key:
@@ -99,7 +114,7 @@ class HttpFinchNodeClient:
                 )
         headers = {"Accept": "application/fhir+json, application/json"}
         if mode == "sandbox" and api_key:
-            headers["Authorization"] = f"Bearer {api_key}"  # VERIFY auth scheme
+            headers["Authorization"] = f"Bearer {api_key}"
         self._http = http or httpx.Client(base_url=base_url.rstrip("/"), timeout=10.0)
         self._http.headers.update(headers)
         self._retries = retries
@@ -127,6 +142,14 @@ class HttpFinchNodeClient:
         return response.json()
 
     def search(self, resource_type: str, patient_id: str) -> list[dict[str, Any]]:
+        try:
+            return self._search(resource_type, patient_id)
+        except httpx.HTTPStatusError as exc:
+            if resource_type == "Claim" and exc.response.status_code == 404:
+                return self._search("ExplanationOfBenefit", patient_id)
+            raise
+
+    def _search(self, resource_type: str, patient_id: str) -> list[dict[str, Any]]:
         resources: list[dict[str, Any]] = []
         path: str | None = self.SEARCH_PATH.format(resource_type=resource_type)
         params: dict[str, str] | None = {"patient": patient_id}

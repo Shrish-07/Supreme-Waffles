@@ -47,7 +47,7 @@ Step-by-step: [`fetch/agentverse/README_AGENTVERSE.md`](../fetch/agentverse/READ
 
 | Step | Env var / flag |
 |---|---|
-| Keyless synthetic demo API | `FINCHNODE_MODE=demo`, `FINCHNODE_BASE_URL=<demo URL>` (VERIFY) |
+| Keyless synthetic demo API | `FINCHNODE_MODE=demo`. Base URL is `https://api.finchnode.com/demo/v1` when `FINCHNODE_BASE_URL` is empty. No API key. |
 | Sandbox: create a sandbox key (`ck_test_…`) | `FINCHNODE_MODE=sandbox`, `FINCHNODE_API_KEY`, `FINCHNODE_BASE_URL` |
 | Check | `python -m finchnode.client --patient <id>` prints normalized records |
 
