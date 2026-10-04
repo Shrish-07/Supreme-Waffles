@@ -36,3 +36,12 @@ def test_non_json_errors_are_wrapped() -> None:
     with pytest.raises(CoreToolError) as excinfo:
         client.get_case(GetCaseRequest(case_id="case_1"))
     assert excinfo.value.status_code == 502
+
+
+def test_connection_errors_become_core_tool_errors() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with pytest.raises(CoreToolError) as excinfo:
+        _client(handler).get_case(GetCaseRequest(case_id="case_1"))
+    assert excinfo.value.status_code == 503 and excinfo.value.code == "core_unreachable"

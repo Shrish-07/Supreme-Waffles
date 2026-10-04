@@ -14,7 +14,7 @@ from fetch.agents.core_client import CoreClient
 from fetch.agents.local_direct import DEMO_CONVERSATION, LocalDirectRunner
 from fetch.agents.logic.claim_logic import handle_claim_analysis_request
 from fetch.agents.logic.visit_logic import handle_visit_evidence_request
-from fetch.agents.session import Stage
+from fetch.agents.session import Stage, save_session
 
 from .conftest import agent_settings
 
@@ -92,6 +92,18 @@ def test_a_different_claim_gets_its_own_case(
     second = LocalDirectRunner(settings=agent_settings(), http=core["client"], sender="other")
     second.send("Please review fn_pat_demo_001 claim CLM-2026-0999-999")
     assert second.session.case_id not in (None, runner.session.case_id)
+
+
+def test_a_call_running_in_the_background_reports_from_core(runner: LocalDirectRunner) -> None:
+    """Live voice runs the call on a background thread: CALLING re-reads Core on any message."""
+    for message in DEMO_CONVERSATION[:6]:
+        runner.send(message)
+    session = runner.session
+    session.stage = Stage.CALLING  # as if the call request returned before the SSN pause
+    save_session(runner.store, session)
+    replies = runner.send("any update?")
+    assert any("Social Security number" in reply for reply in replies)
+    assert "MOCK-REF-48213" in runner.send("Done")[-1]
 
 
 def test_rejecting_the_dispute(runner: LocalDirectRunner, core: dict[str, Any]) -> None:

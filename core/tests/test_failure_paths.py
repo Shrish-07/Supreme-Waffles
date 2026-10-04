@@ -2,9 +2,11 @@
 
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -12,10 +14,11 @@ from app.demo_support import (
     APPROVAL_TEXT,
     DATA_CONSENT,
     RECORDING_CONSENT,
+    answer_open_questions,
     create_demo_visit,
 )
 from app.errors import UpstreamError
-from app.models_db import CaseRow, VisitRow
+from app.models_db import AuditRow, CaseRow, VisitRow
 from app.services import workflows
 from claimshield_contracts.demo import demo_patient, demo_visit_complete, load_demo_scenario
 
@@ -44,6 +47,24 @@ def test_revoked_consent_blocks_record_access(client: TestClient, relay: dict[st
     }
     assert client.post(f"/cases/{case_id}/consents", json=revoke, headers=relay).is_success
     response = client.post("/claims", json={"case_id": case_id, **CLAIM}, headers=relay)
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "consent_required"
+
+
+def test_revoked_recording_consent_blocks_new_visits(
+    client: TestClient, relay: dict[str, str]
+) -> None:
+    case_id = client.post(
+        "/cases", json={"patient": demo_patient().model_dump(), "channel": "relay"}, headers=relay
+    ).json()["case_id"]
+    consent = {"consent_type": "recording", "consent_text": RECORDING_CONSENT, "channel": "relay"}
+    granted = client.post(f"/cases/{case_id}/consents", json=consent, headers=relay).json()
+    client.post(f"/cases/{case_id}/consents", json={**consent, "granted": False}, headers=relay)
+    response = client.post(
+        "/visits",
+        json={"case_id": case_id, "recording_consent_id": granted["consent_id"]},
+        headers=relay,
+    )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "consent_required"
 
@@ -267,3 +288,155 @@ def test_lost_voice_session_on_resume_closes_the_call(
     assert response.status_code == 502
     case = _case(client, relay, case_id)
     assert case["state"] == "FAILED" and case["calls"][0]["status"] == "failed"
+
+
+# --------------------------------------------------------------------------- upstream and audit
+
+
+class _FinchNodeDown:
+    def get_patient(self, patient_id: str) -> None:
+        raise httpx.ConnectError("FinchNode unreachable")
+
+    def search(self, resource_type: str, patient_id: str) -> list[dict[str, Any]]:
+        raise httpx.ConnectError("FinchNode unreachable")
+
+
+def test_finchnode_outage_is_a_502_and_keeps_the_consent(
+    app: FastAPI, client: TestClient, relay: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app.state.container.finchnode, "_client", _FinchNodeDown())
+    case_id = create_demo_visit(client, relay)["case_id"]  # enrichment fails, consent stays
+    consents = _case(client, relay, case_id)["consents"]
+    assert any(c["consent_type"] == "health_data_access" and c["granted"] for c in consents)
+    response = client.post("/claims", json={"case_id": case_id, **CLAIM}, headers=relay)
+    assert response.status_code == 502
+    assert response.json()["detail"]["code"] == "finchnode_unavailable"
+
+
+def test_failed_and_forbidden_tool_calls_are_audited(
+    app: FastAPI, client: TestClient, fetch: dict[str, str], analyzed_case: dict[str, Any]
+) -> None:
+    run = {"agent": "visit_agent", "request_id": "req_audit"}
+    forbidden = client.post(
+        "/internal/tools/get_patient_procedures",
+        json={"case_id": analyzed_case["case_id"], "agent_run": run},
+        headers=fetch,
+    )
+    missing = client.post(
+        "/internal/tools/get_case",
+        json={"case_id": "case_missing", "agent_run": run},
+        headers=fetch,
+    )
+    assert forbidden.status_code == 403 and missing.status_code == 404
+    with app.state.container.session_scope() as db:
+        rows = db.scalars(select(AuditRow).where(AuditRow.action.like("tool.%.failed"))).all()
+        failures = {(row.action, row.details["code"]) for row in rows}
+    assert ("tool.get_patient_procedures.failed", "forbidden") in failures
+    assert ("tool.get_case.failed", "not_found") in failures
+
+
+# --------------------------------------------------------------------------- malformed agent output
+
+CLAIM_AGENT_RUN = {"agent": "claim_agent", "request_id": "req_findings"}
+DISPUTE_AGENT_RUN = {"agent": "dispute_agent", "request_id": "req_dispute"}
+ALL_EFFECTS = {"YES": "dismissed", "NO": "confirmed", "NOT_SURE": "needs_clarification"}
+
+
+@pytest.mark.parametrize("defect", ["missing_answer_effect", "unknown_assessed_line"])
+def test_malformed_findings_are_rejected_before_anything_is_written(
+    client: TestClient, relay: dict[str, str], fetch: dict[str, str], defect: str
+) -> None:
+    case_id = create_demo_visit(client, relay)["case_id"]
+    claim = client.post("/claims", json={"case_id": case_id, **CLAIM}, headers=relay).json()
+    line = claim["lines"][0]
+    effects = dict(ALL_EFFECTS)
+    assessed_line = line["line_id"]
+    if defect == "missing_answer_effect":
+        del effects["NOT_SURE"]
+    else:
+        assessed_line = "line_from_another_claim"
+    finding = {
+        "finding_id": "fnd_regression01",
+        "case_id": case_id,
+        "claim_id": claim["claim_id"],
+        "claim_line_id": line["line_id"],
+        "line_number": line["line_number"],
+        "issue_type": "unsupported_charge",
+        "title": "Charge not supported by the visit record",
+        "explanation": "Nothing in the visit evidence supports this line.",
+        "amount_cents": line["billed_cents"],
+        "confidence": 0.6,
+        "human_confirmation_required": True,
+        "confirmation": {"question": "Did you receive this service?", "effects": effects},
+        "status": "open",
+        "recommended_action": "remove_charge",
+    }
+    assessment = {
+        "claim_line_id": assessed_line,
+        "line_number": line["line_number"],
+        "status": "unsupported",
+    }
+    response = client.post(
+        "/internal/tools/record_findings",
+        json={
+            "case_id": case_id,
+            "claim_id": claim["claim_id"],
+            "findings": [finding],
+            "line_assessments": [assessment],
+            "agent_run": CLAIM_AGENT_RUN,
+        },
+        headers=fetch,
+    )
+    assert response.status_code == 422
+    case = _case(client, relay, case_id)
+    assert case["state"] == "CLAIM_RECEIVED" and case["findings"] == []
+
+
+@pytest.mark.parametrize("defect", ["wrong_amount", "duplicate_item", "wrong_total"])
+def test_dispute_items_must_match_the_confirmed_findings(
+    client: TestClient,
+    relay: dict[str, str],
+    fetch: dict[str, str],
+    analyzed_case: dict[str, Any],
+    defect: str,
+) -> None:
+    case_id = analyzed_case["case_id"]
+    answer_open_questions(client, relay, case_id)
+    case = _case(client, relay, case_id)
+    items = [
+        {
+            "finding_id": f["finding_id"],
+            "claim_line_id": f["claim_line_id"],
+            "line_number": f["line_number"],
+            "issue_type": f["issue_type"],
+            "action": f["recommended_action"],
+            "amount_cents": f["amount_cents"],
+            "summary": f["title"],
+        }
+        for f in case["findings"]
+        if f["status"] in ("confirmed", "needs_clarification")
+    ]
+
+    def record(dispute_items: list[dict[str, Any]], total: int) -> httpx.Response:
+        return client.post(
+            "/internal/tools/record_dispute",
+            json={
+                "case_id": case_id,
+                "claim_id": case["claim"]["claim_id"],
+                "items": dispute_items,
+                "letter_text": "Dear claims department, please review the items below.",
+                "total_disputed_cents": total,
+                "agent_run": DISPUTE_AGENT_RUN,
+            },
+            headers=fetch,
+        )
+
+    bad = [dict(item) for item in items]
+    if defect == "wrong_amount":
+        bad[0]["amount_cents"] += 100
+    elif defect == "duplicate_item":
+        bad.append(dict(bad[0]))
+    total = sum(item["amount_cents"] for item in bad) + (1 if defect == "wrong_total" else 0)
+    assert record(bad, total).status_code == 422
+    valid = record(items, sum(item["amount_cents"] for item in items))
+    assert valid.status_code == 200, valid.text  # the same case accepts the correct package

@@ -93,3 +93,22 @@ def test_approval_button_approves_dispute(
         f"/disputes/{awaiting_approval['dispute']['dispute_id']}", headers=relay
     ).json()
     assert dispute["patient_authorization_id"]
+
+
+def test_secrets_typed_into_replies_are_never_stored(
+    app: Any, client: TestClient, settings: Settings, analyzed_case: dict[str, Any]
+) -> None:
+    from app.models_db import WebhookEventRow
+
+    event = _event(
+        analyzed_case["case_id"],
+        event_id="evt_secret01",
+        event_type="text_reply",
+        intervention_id=_first_question(analyzed_case),
+        choice="no, my ssn is 123-45-6789",
+    )
+    response = signed_post(client, settings.webhook_secret(), "/relay/webhook", event)
+    assert response.json()["status"] == "ignored" and "123-45-6789" not in response.text
+    with app.state.container.session_scope() as db:
+        stored = db.get(WebhookEventRow, "evt_secret01").result
+    assert "123-45-6789" not in json.dumps(stored)

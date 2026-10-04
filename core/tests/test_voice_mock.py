@@ -150,3 +150,73 @@ def test_dispatcher_injects_ids_and_rejects_model_supplied_case_id() -> None:
     assert tool == ToolName.REQUEST_HUMAN
     assert payload["case_id"] == "case_real" and payload["call_id"] == "call_real"
     assert dispatcher.dispatch("delete_everything", {})["error"] == "unknown_tool"
+
+
+def _back_in_progress(app: Any, call_id: str) -> None:
+    """Resolve the open handoff in the DB and resume the call, as a live bridge would."""
+    with app.state.container.session_scope() as db:
+        call = db.get(CallRow, call_id)
+        db.get(InterventionRow, call.open_intervention_id).status = "resolved"
+        call.status, call.open_intervention_id = "in_progress", None
+        db.get(CaseRow, call.case_id).state = "CALL_IN_PROGRESS"
+
+
+def test_cancel_with_a_failing_hangup_still_closes_the_call(
+    client: TestClient,
+    relay: dict[str, str],
+    paused_call: dict[str, Any],
+    app: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def hangup_fails(_ref: str) -> None:
+        raise RuntimeError("carrier unreachable")
+
+    monkeypatch.setattr(app.state.container.telephony, "hangup", hangup_fails)
+    response = client.post(
+        f"/human-intervention/{paused_call['call']['open_intervention_id']}/resolve",
+        json={"choice": "CANCEL", "channel": "relay"},
+        headers=relay,
+    )
+    assert response.status_code == 200
+    assert response.json()["case_state"] == "FAILED"
+
+
+def test_a_call_handoff_is_never_a_confirmation_question(
+    client: TestClient, relay: dict[str, str], paused_call: dict[str, Any], app: Any
+) -> None:
+    call_id = paused_call["call"]["call_id"]
+    _back_in_progress(app, call_id)
+    handoff = client.post(
+        "/human-intervention",
+        json={
+            "case_id": paused_call["case_id"],
+            "reason": "patient_confirmation",
+            "prompt": "Please confirm with the representative.",
+            "call_id": call_id,
+        },
+        headers=relay,
+    )
+    assert handoff.status_code == 201
+    assert handoff.json()["reason"] == "call_escalation"  # pausing is the safe default
+    resolved = client.post(
+        f"/human-intervention/{handoff.json()['intervention_id']}/resolve",
+        json={"choice": "DONE", "channel": "relay"},
+        headers=relay,
+    )
+    assert resolved.status_code == 200
+
+
+def test_insurer_notes_with_an_ssn_are_rejected(
+    client: TestClient, voice: dict[str, str], paused_call: dict[str, Any]
+) -> None:
+    response = client.post(
+        "/internal/tools/record_insurer_response",
+        json={
+            "case_id": paused_call["case_id"],
+            "call_id": paused_call["call"]["call_id"],
+            "outcome": "partially_removed",
+            "notes": "Rep confirmed member SSN 123-45-6789.",
+        },
+        headers=voice,
+    )
+    assert response.status_code == 422 and "123-45-6789" not in response.text

@@ -49,7 +49,9 @@
   carries `agent_run`. All agents share the Fetch token, so this catches bugs, not a
   hostile caller; issue per-agent tokens before production.
 - In `RELAY_MODE=mock` the Relay service skips platform signature verification
-  (there is no platform); `live` always verifies.
+  (there is no platform); `live` always verifies. docker-compose therefore publishes
+  every port on `127.0.0.1` only (Postgres also uses a default dev password); use a
+  tunnel to receive live Relay webhooks.
 
 ## 3. PHI handling (prototype level)
 

@@ -5,6 +5,9 @@
 #   docker compose --profile ollama up -> + local Ollama for EXTRACTION_MODE=ollama
 #
 # The Postgres credentials below are local-development defaults, not secrets.
+# Ports are published on 127.0.0.1 only: the mock Relay service skips platform
+# signature checks and Postgres uses a default password. To receive live Relay
+# webhooks, point a tunnel (e.g. ngrok) at localhost:3000 instead of opening the port.
 services:
   db:
     image: postgres:16-alpine
@@ -13,7 +16,7 @@ services:
       POSTGRES_PASSWORD: claimshield_dev
       POSTGRES_DB: claimshield
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -38,7 +41,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 
   relay:
     profiles: ["relay"]
@@ -53,7 +56,7 @@ services:
     depends_on:
       - core
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
   agents:
     profiles: ["agents"]
@@ -68,13 +71,13 @@ services:
     depends_on:
       - core
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
 
   ollama:
     profiles: ["ollama"]
     image: ollama/ollama:latest
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama:/root/.ollama
 
