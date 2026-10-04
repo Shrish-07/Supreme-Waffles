@@ -3,8 +3,9 @@
 uagents 0.25.x ``Model`` is built on ``pydantic.v1.BaseModel`` (decision D1 in
 docs/ARCHITECTURE.md). Therefore:
 
-- Messages subclass ``uagents.Model`` when uagents is installed, otherwise an
-  equivalent shim on ``pydantic.v1.BaseModel``. Schema digests are identical.
+- Messages subclass ``uagents_core.models.Model`` (== ``uagents.Model``) when it is
+  installed, otherwise an equivalent shim on ``pydantic.v1.BaseModel``. Schema
+  digests are identical either way (pinned in fixtures/agent_message_digests.json).
 - Messages only nest other message DTOs from this module (never v2 models).
 - Enum-like fields are plain ``str`` so adding an enum value does not change the
   schema digest (decision D2). Allowed values are listed in comments.
@@ -24,7 +25,9 @@ from .models import DisputeCandidate, DisputeItem, EvidenceItem
 from .version import AGENT_PROTOCOL_VERSION
 
 try:  # pragma: no cover - exercised only where uagents is installed
-    from uagents import Model as AgentModel
+    # uagents_core.models.Model is the class uagents re-exports as uagents.Model.
+    # Import it from uagents_core: importing `uagents` itself configures root logging.
+    from uagents_core.models import Model as AgentModel
 except ImportError:  # Core and tests do not need uagents installed.
     from pydantic.v1 import BaseModel as _V1BaseModel
 
