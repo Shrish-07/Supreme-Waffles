@@ -8,6 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from claimshield_contracts.enums import ServiceName
@@ -39,6 +40,12 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @field_validator("*", mode="before")
+    @classmethod
+    def _strip_whitespace(cls, value: object) -> object:
+        # .env edits easily leave stray spaces (e.g. XAI_VOICE_MODEL=... trailing space).
+        return value.strip() if isinstance(value, str) else value
+
     # --- core
     app_env: Literal["dev", "test", "prod"] = "dev"
     log_level: str = "INFO"
@@ -63,6 +70,9 @@ class Settings(BaseSettings):
     telnyx_connection_id: str = ""
     telnyx_phone_number: str = ""
     telnyx_public_key: str = ""
+    # false => accept Telnyx webhooks without an Ed25519 signature (demo only,
+    # when the Mission Control public key is unavailable). Keep true in prod.
+    telnyx_webhook_verify: bool = True
     public_base_url: str = ""
     xai_sip_uri: str = ""
     telephony_allowed_numbers: str = "+15555550100"
@@ -158,15 +168,16 @@ class Settings(BaseSettings):
                 ("XAI_REALTIME_URL", self.xai_realtime_url),
             )
         if self.telephony_mode == "live":
-            need(
-                "TELEPHONY_MODE=live",
+            live_pairs = [
                 ("TELNYX_API_KEY", self.telnyx_api_key),
                 ("TELNYX_CONNECTION_ID", self.telnyx_connection_id),
                 ("TELNYX_PHONE_NUMBER", self.telnyx_phone_number),
-                ("TELNYX_PUBLIC_KEY", self.telnyx_public_key),
                 ("PUBLIC_BASE_URL", self.public_base_url),
                 ("XAI_SIP_URI", self.xai_sip_uri),
-            )
+            ]
+            if self.telnyx_webhook_verify:
+                live_pairs.append(("TELNYX_PUBLIC_KEY", self.telnyx_public_key))
+            need("TELEPHONY_MODE=live", *live_pairs)
         if self.fetch_mode == "agentverse":
             need("FETCH_MODE=agentverse", ("ORCHESTRATOR_URL", self.orchestrator_url))
         if self.extraction_mode == "ollama":

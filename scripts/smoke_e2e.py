@@ -15,6 +15,7 @@ The self-hosted Core runs Alembic migrations on a temp SQLite DB, all modes mock
 import argparse
 import contextlib
 import dataclasses
+import gc
 import logging
 import socket
 import sys
@@ -57,9 +58,8 @@ def local_core(db_path: Path) -> Iterator[tuple[str, Settings]]:
     settings = isolated_settings(db_path, log_level="WARNING")
     _migrate(settings.resolved_database_url)
     port = _free_port()
-    server = uvicorn.Server(
-        uvicorn.Config(create_app(settings), host="127.0.0.1", port=port, log_level="warning")
-    )
+    app = create_app(settings)
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     deadline = time.time() + 15
@@ -70,6 +70,8 @@ def local_core(db_path: Path) -> Iterator[tuple[str, Settings]]:
     finally:
         server.should_exit = True
         thread.join(timeout=10)
+        app.state.container.engine.dispose()  # release the SQLite file on Windows
+        gc.collect()  # drop the migration engine reference too
 
 
 def chat_leg(base_url: str, settings: Settings) -> str:
@@ -124,7 +126,7 @@ def main() -> int:
             run(args.base_url.rstrip("/"), Settings(), chat=not args.skip_chat)
         else:
             with (
-                tempfile.TemporaryDirectory() as tmp,
+                tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp,
                 local_core(Path(tmp) / "smoke.db") as (url, s),
             ):
                 run(url, s, chat=not args.skip_chat)
