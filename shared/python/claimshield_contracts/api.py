@@ -24,6 +24,7 @@ from .models import (
     CallSession,
     CodeRef,
     ContractModel,
+    Dispute,
     DisputeCandidate,
     EvidenceItem,
     HumanIntervention,
@@ -149,6 +150,14 @@ class ClaimAnalysisResult(ContractModel):
 
 class DisputeCreate(InputModel):
     case_id: str
+
+
+class DisputePreparation(ContractModel):
+    """Result of POST /disputes. ``dispute`` is None while agents are still working."""
+
+    status: WorkStatus
+    case_state: CaseState
+    dispute: Dispute | None = None
 
 
 class DisputeApproval(InputModel):

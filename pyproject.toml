@@ -35,6 +35,11 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
 "core/app/migrations/versions/*" = ["E501"]
+# FastAPI idiom: Depends(require_scopes(...)) in parameter defaults.
+"core/app/routers/*" = ["B008"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Body"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app", "claimshield_contracts", "intelligence", "finchnode", "fetch"]

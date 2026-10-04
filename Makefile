@@ -26,7 +26,7 @@ dev: ## Run Core + Postgres with docker compose (http://localhost:8080/docs)
 	docker compose up --build core db
 
 dev-local: ## Run Core locally on SQLite, no Docker (http://localhost:8080/docs)
-	cd core && ../$(BIN)/alembic upgrade head && ../$(BIN)/uvicorn app.main:app --reload --port $(CORE_PORT)
+	cd core && ../$(BIN)/alembic upgrade head && ../$(BIN)/uvicorn app.main:create_app --factory --reload --port $(CORE_PORT)
 
 seed: ## Load the synthetic demo scenario into the configured database
 	bash scripts/seed.sh
