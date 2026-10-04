@@ -1,11 +1,23 @@
 """PHI redaction and fail-fast configuration."""
 
 import logging
+import os
+from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
 from app.audit import PhiRedactingFilter, mask_member_ref, mask_phone, redact, redact_text
 from app.config import ConfigError, Settings
+from app.demo_support import build_isolated_app, clean_env
+
+
+@pytest.fixture(autouse=True)
+def _no_repo_env() -> Iterator[None]:
+    """A configured developer .env (loaded into the process env by fetch imports) must
+    never poison these configuration tests, including the direct Settings() below."""
+    with clean_env():
+        yield
 
 
 def test_redact_text_masks_phi_patterns() -> None:
@@ -37,7 +49,8 @@ def test_log_filter_redacts_messages() -> None:
 
 
 def _settings(**overrides: object) -> Settings:
-    return Settings(_env_file=None, app_env="test", **overrides)  # type: ignore[arg-type]
+    with clean_env():  # a configured developer .env must never leak into these checks
+        return Settings(_env_file=None, app_env="test", **overrides)  # type: ignore[arg-type]
 
 
 def test_default_settings_are_all_mock_and_valid() -> None:
@@ -67,3 +80,16 @@ def test_dev_fallback_tokens_only_outside_prod() -> None:
     prod = Settings(_env_file=None, app_env="prod")  # type: ignore[arg-type]
     assert not any(prod.service_tokens().values())
     assert prod.webhook_secret() == ""
+
+
+def test_isolated_apps_ignore_a_configured_repo_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Regression test: fetch imports load the repo .env into the process env; isolated
+    apps must still run fully in mock mode (and the environment must be restored)."""
+    monkeypatch.setenv("FINCHNODE_MODE", "sandbox")
+    monkeypatch.setenv("FINCHNODE_API_KEY", "ck_test_x")
+    monkeypatch.setenv("FINCHNODE_BASE_URL", "https://example.invalid")
+    app = build_isolated_app(tmp_path / "core.db")
+    assert app.state.container.finchnode.mode == "mock"
+    assert os.environ["FINCHNODE_MODE"] == "sandbox"  # clean_env() restored it

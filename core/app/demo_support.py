@@ -4,8 +4,11 @@ Everything here goes through Core's public HTTP API, so the demo setup is
 validated exactly like a real client's requests.
 """
 
+import contextlib
 import json
+import os
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -32,14 +35,69 @@ DATA_CONSENT = (
 )
 
 
+# Every env var the Settings model reads. A configured developer .env (loaded
+# into the process environment when fetch/agents/settings.py is imported) must
+# never leak into isolated tests or the mock smoke run.
+REPO_ENV_VARS = (
+    "APP_ENV",
+    "LOG_LEVEL",
+    "DATABASE_URL",
+    "RELAY_SERVICE_TOKEN",
+    "FETCH_SERVICE_TOKEN",
+    "VOICE_SERVICE_TOKEN",
+    "CORE_WEBHOOK_SECRET",
+    "CONFIRMATION_THRESHOLD",
+    "NOTIFY_MODE",
+    "RELAY_SERVICE_URL",
+    "XAI_VOICE_MODE",
+    "XAI_API_KEY",
+    "XAI_REALTIME_URL",
+    "XAI_VOICE_MODEL",
+    "XAI_VOICE_NAME",
+    "TELEPHONY_MODE",
+    "TELNYX_API_KEY",
+    "TELNYX_CONNECTION_ID",
+    "TELNYX_PHONE_NUMBER",
+    "TELNYX_PUBLIC_KEY",
+    "TELNYX_WEBHOOK_VERIFY",
+    "PUBLIC_BASE_URL",
+    "XAI_SIP_URI",
+    "TELEPHONY_ALLOWED_NUMBERS",
+    "FETCH_MODE",
+    "ORCHESTRATOR_URL",
+    "FINCHNODE_MODE",
+    "FINCHNODE_API_KEY",
+    "FINCHNODE_BASE_URL",
+    "EXTRACTION_MODE",
+    "OLLAMA_URL",
+    "OLLAMA_MODEL",
+)
+
+
+@contextlib.contextmanager
+def clean_env() -> Iterator[None]:
+    """Temporarily pop every REPO_ENV_VARS variable; restore it afterwards.
+
+    pydantic Settings read the process environment even with ``_env_file=None``,
+    so a developer's configured .env would otherwise redirect isolated runs
+    (e.g. FINCHNODE_MODE=sandbox sends mock tests at the live API).
+    """
+    saved = {name: os.environ.pop(name) for name in REPO_ENV_VARS if name in os.environ}
+    try:
+        yield
+    finally:
+        os.environ.update(saved)
+
+
 def isolated_settings(db_path: Path, **overrides: Any) -> Settings:
-    """Mock-everything settings on a private SQLite file (never reads .env)."""
-    return Settings(  # type: ignore[call-arg]
-        _env_file=None,
-        app_env="test",
-        database_url=f"sqlite:///{db_path}",
-        **overrides,
-    )
+    """Mock-everything settings on a private SQLite file (never reads .env or the env)."""
+    with clean_env():
+        return Settings(  # type: ignore[call-arg]
+            _env_file=None,
+            app_env="test",
+            database_url=f"sqlite:///{db_path}",
+            **overrides,
+        )
 
 
 def build_isolated_app(db_path: Path, **overrides: Any) -> FastAPI:

@@ -47,7 +47,14 @@ def process_telnyx_event(
     signature: str | None,
 ) -> dict[str, bool]:
     """Verify the signature, then dispatch one Telnyx event. Return {"received": ...}."""
-    verify_telnyx_signature(container.settings.telnyx_public_key, raw_body, timestamp, signature)
+    if container.settings.telnyx_webhook_verify:
+        verify_telnyx_signature(
+            container.settings.telnyx_public_key, raw_body, timestamp, signature
+        )
+    else:
+        # TELNYX_WEBHOOK_VERIFY=false: the endpoint accepts unauthenticated
+        # events (demo only). Keep the tunnel URL private; re-enable for prod.
+        log.warning("Telnyx webhook signature verification is DISABLED")
     try:
         event = json.loads(raw_body)
     except ValueError as exc:

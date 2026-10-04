@@ -20,7 +20,7 @@ from app.adapters.telephony.webhook_signature import (
     TelnyxSignatureError,
     verify_telnyx_signature,
 )
-from app.demo_support import build_isolated_app
+from app.demo_support import build_isolated_app, clean_env
 from app.errors import SafetyBlocked, UpstreamError
 
 
@@ -304,3 +304,49 @@ def test_webhook_hangup_for_an_unknown_call_is_ignored(tmp_path: Path, telnyx_ke
     response = _post_event(app, signing_key, body)
     assert response.status_code == 200
     assert response.json() == {"received": False}
+
+
+# ------------------------------------------------------------------ verification bypass
+
+
+def test_webhook_without_verification_accepts_unsigned_events(tmp_path, monkeypatch):
+    """TELNYX_WEBHOOK_VERIFY=false: no public key, a bad signature still processes."""
+    app = build_isolated_app(tmp_path / "core.db", telnyx_webhook_verify=False)
+    captured = _stub_live_telephony(app, monkeypatch)
+    body = _event_body(
+        "call.answered",
+        to="+15555550100",
+        call_control_id="cc_1",
+        client_state=to_client_state("call_123"),
+    )
+    response = _post_event(app, SigningKey.generate(), body)  # signature ignored
+    assert response.status_code == 200
+    assert response.json() == {"received": True}
+    assert captured["path"] == "/v2/calls/cc_1/actions/transfer"
+
+
+def test_webhook_without_verification_rejects_malformed_json(tmp_path):
+    app = build_isolated_app(tmp_path / "core.db", telnyx_webhook_verify=False)
+    response = _post_event(app, SigningKey.generate(), b"this is not json")
+    assert response.status_code == 422
+
+
+def test_live_telephony_requires_public_key_only_when_verifying():
+    from app.config import Settings
+
+    base = dict(
+        _env_file=None,
+        app_env="test",
+        telephony_mode="live",
+        telnyx_api_key="KEY_test",
+        telnyx_connection_id="3063114307173614924",
+        telnyx_phone_number="+18089005823",
+        public_base_url="https://public.example.ngrok-free.dev",
+        xai_sip_uri="sip:test@sip.x.ai",
+    )
+    with clean_env():  # the repo .env must not leak in during full-suite runs
+        off = Settings(**base, telnyx_webhook_verify=False)
+        off.validate_for_startup()  # TELNYX_PUBLIC_KEY not required with the flag off
+        on = Settings(**base)
+    expected = "TELEPHONY_MODE=live requires TELNYX_PUBLIC_KEY"
+    assert expected in on.missing_live_settings()
