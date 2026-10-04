@@ -14,15 +14,15 @@ Legend: ☐ = still to verify · ☑ = verified while building the scaffold (how
 |---|---|---|
 | ☑ | `uagents==0.25.5` exists on PyPI (0.26.0 is newer; re-verify before upgrading) | `fetch/requirements.txt` |
 | ☑ | `uagents.Model` is `uagents_core.models.Model`, built on `pydantic.v1.BaseModel`; schema digests are identical with our shim (checked in the installed package; pinned in `agent_message_digests.json`) | `shared/python/claimshield_contracts/agent_messages.py` |
-| ☑ | Chat protocol import path `uagents_core.contrib.protocols.chat` (`ChatMessage`, `ChatAcknowledgement`, `TextContent`, `EndSessionContent`, `chat_protocol_spec`, v0.3.0) | `fetch/agents/orchestrator.py:22` |
+| ☑ | Chat protocol import path `uagents_core.contrib.protocols.chat` (`ChatMessage`, `ChatAcknowledgement`, `TextContent`, `EndSessionContent`, `chat_protocol_spec`, v0.3.0) | `fetch/agents/orchestrator.py:23` |
 | ☑ | `Agent(..., mailbox=True, readme_path, description, handle, publish_agent_details)`, `include(..., publish_manifest=True)`, `on_rest_post`, `on_interval`, `ctx.storage` exist in 0.25.5; REST stays served when `mailbox=True`; a Bureau merges agents' REST handlers | `fetch/agents/orchestrator.py`, `core/app/adapters/fetch_bridge/live.py:4` |
 | ☑ | Agents in one process dispatch locally (no Almanac needed); covered by `fetch/tests/test_uagents_bureau.py` | `fetch/agents/run_all.py` |
 | ☐ | Agentverse inspector → **Connect mailbox** flow, and where the README/manifest appear | `fetch/agentverse/README_AGENTVERSE.md:34` |
 | ☐ | Handle rules for `ORCHESTRATOR_HANDLE` (allowed characters, uniqueness, approval) | `README_AGENTVERSE.md:38`, `.env.example` |
 | ☐ | ASI:One discovery: how a published agent becomes discoverable/searchable (README keywords? category?) | `fetch/agentverse/agent_profiles/orchestrator.md` |
-| ☐ | Separate-process mode: mailbox agents resolving each other without explicit endpoints | `fetch/agents/run_all.py:18`, `README_AGENTVERSE.md:64` |
+| ☐ | Separate-process mode: mailbox agents resolving each other without explicit endpoints | `fetch/agents/run_all.py:18`, `README_AGENTVERSE.md:65` |
 | ☐ | Whether ASI:One sends `StartSessionContent` / expects `EndSessionContent` (we end the session on terminal replies) | `fetch/agents/orchestrator.py` |
-| ☐ | Real FinchNode patient-id format for chat parsing (assumed `fn_pat_…`) | `fetch/agents/intent.py:10` |
+| ☐ | Real FinchNode patient-id format for chat parsing (assumed `fn_pat_…`) | `fetch/agents/intent.py:13` |
 | ☐ | Whether `AGENTVERSE_API_KEY` is needed at all (mailbox is connected via the inspector; not read by code) | `.env.example` |
 
 ## FinchNode (Member 4)
@@ -56,10 +56,10 @@ Legend: ☐ = still to verify · ☑ = verified while building the scaffold (how
 |---|---|---|
 | ☐ | Realtime WebSocket URL, model query parameter, auth header | `core/app/adapters/xai_voice/live.py:107,117`, `.env.example` (`XAI_REALTIME_URL`, `XAI_VOICE_MODEL`) |
 | ☐ | Voice names (`XAI_VOICE_NAME`) | `.env.example` |
-| ☐ | `session.update` schema: instructions, tools, tool_choice, turn detection, input transcription | `core/app/adapters/xai_voice/live.py:93` |
+| ☐ | `session.update` schema: instructions, tools, tool_choice, turn detection, input transcription | `core/app/adapters/xai_voice/live.py:93,199` |
 | ☐ | Event names: input transcription completed, output transcript done, function-call arguments done, error | `core/app/adapters/xai_voice/live.py:36` |
 | ☐ | Function-call result format (`conversation.item.create` + `function_call_output`) and `response.create` | `core/app/adapters/xai_voice/live.py` |
-| ☐ | How to force an exact utterance / interrupt (`response.cancel`, per-response instructions) | `core/app/adapters/xai_voice/live.py:172` |
+| ☐ | How to force an exact utterance / interrupt (`response.cancel`, per-response instructions) | `core/app/adapters/xai_voice/live.py:178` |
 | ☐ | SIP: whether xAI exposes a SIP endpoint, its URI format, how a call id is passed, and how the control WebSocket attaches to a SIP call | `core/app/adapters/telephony/twilio_sip.py:3,47`, `XAI_SIP_URI` |
 
 ## Twilio (Member 1)
