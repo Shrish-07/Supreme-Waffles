@@ -16,8 +16,8 @@ Claim `CLM-2026-0915-001` (synthetic) from *Acme Health Plan* bills:
 | 6 | HCPCS J3490 | Unclassified drug | $40.00 | **unknown medication** → ask patient |
 
 Expected outcome: 3 findings ($1,070.00 flagged). The patient answers the clean
-question **"Did you receive anesthesia…? YES / NO / NOT SURE"** with NO, and NOT SURE
-for the unclassified drug. The patient approves the dispute. A mock call runs, the rep
+question **"Did you receive anesthesia during your visit on September 15, 2026?"
+(YES / NO / NOT SURE)** with NO, and NOT SURE for the unclassified drug. The patient approves the dispute. A mock call runs, the rep
 asks for the SSN, the call pauses for a human, the patient verifies directly, and the
 rep agrees to remove $780 + $250 and to request itemization for $40 →
 **RESOLVED**.
@@ -45,7 +45,7 @@ Offline rehearsal of the exact same conversation (no Agentverse): `make chat`.
 |---|---|
 | "Hi ClaimShield, can you review my bill? My FinchNode patient ID is fn_pat_demo_001 and the claim is CLM-2026-0915-001." | Ack + "To review your bill I need your permission to read your FinchNode health records for this case. Reply YES to consent." |
 | "Yes" | "Thanks — checking your visit evidence and claim…" → "Visit evidence: MRI brain with contrast; lorazepam 1 mg IV." → summary of **3 potential issues** ($1,070.00) → "**Did you receive anesthesia during your visit on 2026-09-15?** Reply YES, NO, or NOT SURE." |
-| "No" | Next question: "Other than lorazepam, did you receive any other medication…?" |
+| "No" | Next question: "Your bill includes a $40.00 charge for an unspecified drug. Other than lorazepam and gadolinium contrast, did you receive any other medication during your visit on September 15, 2026?" |
 | "Not sure" | "Items to dispute: … Prepare a dispute package? (YES/NO)" |
 | "Yes" | Dispute package summary with policy citations → "Reply **APPROVE** to approve the dispute and authorize ClaimShield to call Acme Health Plan for you, or REJECT." |
 | "APPROVE" | "Calling Acme Health Plan…" → "The representative asked for the member's **Social Security number**. ClaimShield never shares that, so I paused the call. Please verify directly with the representative, then reply DONE." |
@@ -66,11 +66,14 @@ adapter) against Core and prints what the patient would see:
 
 1. "Hi" → welcome + consent buttons (**I consent** / **No thanks**).
 2. Recording consent → appointment recording → audio ingested → transcript posted to Core.
-3. "Review my bill" → claim pulled from FinchNode → analysis.
+3. **Review my bill** → "Which bill? Send the claim number" → `CLM-2026-0915-001` → claim pulled from FinchNode → analysis.
 4. Question card: "Did you receive anesthesia…?" **[YES] [NO] [NOT SURE]** (one at a time).
 5. Approval card: total, items, letter preview → **[Review] [Approve] [Reject]**.
 6. During the call: handoff card "The insurer is asking for identity verification. ClaimShield never shares your SSN…" **[Done] [Cancel call]**.
-7. Final report with the reference number.
+7. Final status + case summary with the reference number.
+
+Questions, the approval card and the handoff card are Core notifications rendered by the Relay
+service; button taps travel back to Core as signed events on `POST /relay/webhook`.
 
 Live: set `RELAY_MODE=live` + keys, `NOTIFY_MODE=relay_service`, tunnel the service, and repeat from a phone.
 

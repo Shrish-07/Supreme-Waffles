@@ -1,7 +1,7 @@
 """Export Core's OpenAPI schema to shared/openapi/core.openapi.json.
 
-    make openapi                              # write
-    python scripts/export_openapi.py --check  # CI: fail if the committed file is stale
+make openapi                              # write
+python scripts/export_openapi.py --check  # CI: fail if the committed file is stale
 """
 
 import argparse
@@ -32,7 +32,9 @@ def main() -> int:
     if args.check:
         current = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
         if current != text:
-            print("shared/openapi/core.openapi.json is stale: run `make contracts`.", file=sys.stderr)
+            print(
+                "shared/openapi/core.openapi.json is stale: run `make contracts`.", file=sys.stderr
+            )
             return 1
         print("OpenAPI schema is up to date.")
         return 0

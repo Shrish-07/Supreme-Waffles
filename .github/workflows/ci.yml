@@ -1,0 +1,87 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python (lint, contracts, tests, smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e shared/python -e . -e "core[dev]" -r fetch/requirements.txt
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: OpenAPI contract is up to date
+        run: python scripts/export_openapi.py --check
+      - name: Tests (mock mode, includes real uAgents Bureau tests)
+        run: pytest
+      - name: Smoke (real Core HTTP API, Relay + ASI:One paths)
+        run: python scripts/smoke_e2e.py
+
+  node:
+    name: Node (types, tests, generated TS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: relay
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: relay/package-lock.json
+      - run: npm ci
+      - name: Generated TS types match the OpenAPI schema
+        run: |
+          npx openapi-typescript ../shared/openapi/core.openapi.json -o /tmp/core.ts --default-non-nullable=false
+          diff -u ../shared/ts/core.ts /tmp/core.ts
+      - run: npm run lint
+      - run: npm test
+
+  integration:
+    name: Relay service against a live Core
+    needs: [python, node]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: relay/package-lock.json
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e shared/python -e . -e "core"
+          (cd relay && npm ci)
+      - name: Start Core (SQLite, all mock)
+        run: |
+          cd core
+          alembic upgrade head
+          uvicorn app.main:create_app --factory --port 8080 > /tmp/core.log 2>&1 &
+          for i in $(seq 1 40); do curl -sf localhost:8080/health && break; sleep 0.5; done
+      - name: Relay demo conversation (consent -> recording -> review -> approval -> SSN handoff -> report)
+        run: cd relay && npm run demo
+      - name: Core log
+        if: always()
+        run: cat /tmp/core.log
