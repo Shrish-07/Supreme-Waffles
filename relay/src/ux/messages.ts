@@ -51,10 +51,23 @@ export const copy = {
     buttons: [BUTTONS.recordYes, BUTTONS.recordSkip],
   }),
   recordingStarted: "Recording started. I'll process it when your appointment ends.",
+  sendVoiceMemo: (): OutboundMessage => ({
+    text:
+      "Great. Record your appointment as a voice memo (hold the mic button in this chat) " +
+      "and send it here. I'll transcribe it and note what was done.",
+    buttons: [BUTTONS.recordSkip],
+  }),
+  transcribing: "Got your recording. Transcribing it now...",
+  transcriptionFailed: (reason: string): OutboundMessage => ({
+    text: `I couldn't transcribe that recording (${reason}). Please send the voice memo again.`,
+    buttons: [BUTTONS.recordSkip],
+  }),
+  audioNotExpected:
+    "Thanks, but I only use recordings right after you tap Record my visit. Send \"restart\" to start over.",
   transcriptReady: (items: string[]): OutboundMessage => ({
     text:
       "Your visit recording is processed." +
-      (items.length ? ` I noted: ${items.join("; ")}.` : "") +
+      (items.length ? ` I noted: ${items.join("; ")}.` : " I didn't find any billable services in it.") +
       "\n\nWhen your bill arrives, tap Review my bill.",
     buttons: [BUTTONS.reviewBill],
   }),

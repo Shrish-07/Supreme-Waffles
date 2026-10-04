@@ -5,8 +5,9 @@
  * tap comes back as the label text, so the adapter remembers the last buttons sent to
  * each person and maps the label back to its id (`resolveButton`).
  *
- * Relay has no documented recording API (SDK checked 2026-10-04), so recording is
- * simulated: the visit completes at once with the synthetic demo transcript.
+ * Relay has no recording API (SDK checked 2026-10-04). The patient records the
+ * appointment as a voice memo in the chat; it arrives as an audio media part with a
+ * signed download URL (valid 60 minutes).
  */
 import { randomUUID } from "node:crypto";
 
@@ -18,7 +19,7 @@ const labelKey = (label: string) => label.trim().toLowerCase();
 
 export class LiveRelayAdapter implements RelayAdapter {
   readonly mode = "live" as const;
-  readonly simulatesRecording = true;
+  readonly simulatesRecording = false;
   private readonly lastButtons = new Map<string, Button[]>();
 
   constructor(
@@ -67,10 +68,9 @@ export class LiveRelayAdapter implements RelayAdapter {
     return { recordingId: `simulated-${randomUUID()}` };
   }
 
+  /** The signed URL is itself the credential; Relay says not to send the Agent Token with it. */
   async fetchRecording(url: string): Promise<Uint8Array> {
-    const response = await this.fetchImpl(url, {
-      headers: { Authorization: `Bearer ${this.config.relayAgentToken}` },
-    });
+    const response = await this.fetchImpl(url);
     if (!response.ok) throw new Error(`recording download failed: ${response.status}`);
     return new Uint8Array(await response.arrayBuffer());
   }

@@ -12,7 +12,12 @@ import { LiveTranscriber, MockTranscriber } from "./handlers/transcription";
 import { LiveRelayAdapter } from "./relayAdapter/live";
 import { MockRelayAdapter } from "./relayAdapter/mock";
 import { ConversationStore } from "./store";
-import { EventLedger, SignatureError, parsePlatformEvent, verifyPlatformSignature } from "./webhook";
+import {
+  EventLedger,
+  SignatureError,
+  parsePlatformEvent,
+  verifyPlatformSignature,
+} from "./webhook";
 
 export function createContext(config: RelayConfig, overrides: Partial<HandlerContext> = {}): HandlerContext {
   const relay = config.mode === "live" ? new LiveRelayAdapter(config) : new MockRelayAdapter(true);
@@ -21,7 +26,7 @@ export function createContext(config: RelayConfig, overrides: Partial<HandlerCon
     core: new CoreClient(config.coreBaseUrl, config.serviceToken, config.coreWebhookSecret),
     relay,
     store: new ConversationStore(join(config.dataDir, "conversations.json")),
-    transcriber: relay.simulatesRecording ? new MockTranscriber() : new LiveTranscriber(),
+    transcriber: relay.simulatesRecording ? new MockTranscriber() : new LiveTranscriber(config.xaiApiKey, config.xaiSttUrl),
     log: (message) => console.log(`[relay] ${message}`),
     ...overrides,
   };

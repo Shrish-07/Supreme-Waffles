@@ -69,6 +69,16 @@ export interface InboundEvent {
   text?: string;
   buttonId?: string;
   recordingUrl?: string;
+  /** An audio attachment (voice memo). `url` is a signed credential: never log it. */
+  audio?: InboundAudio;
+}
+
+export interface InboundAudio {
+  attachmentId: string;
+  url: string;
+  mimeType: string;
+  durationMs?: number;
+  sizeBytes?: number;
 }
 
 interface RelayEnvelope {
@@ -77,7 +87,15 @@ interface RelayEnvelope {
   data?: {
     direction?: string;
     sender_handle?: { handle?: string };
-    parts?: { type?: string; value?: unknown }[];
+    parts?: {
+      type?: string;
+      value?: unknown;
+      id?: string;
+      url?: string;
+      mime_type?: string;
+      duration_ms?: number | null;
+      size_bytes?: number;
+    }[];
   };
 }
 
@@ -90,10 +108,27 @@ function parseRelayEnvelope(event: RelayEnvelope): InboundEvent {
     return { id: event.event_id, kind: "ignored", from: from ?? "" };
   }
   // A button tap arrives as a text part whose value is the button's label.
-  const text = (data.parts ?? [])
+  const parts = data.parts ?? [];
+  const text = parts
     .filter((part) => part.type === "text" && typeof part.value === "string")
     .map((part) => part.value as string)
     .join("\n");
+  const audio = parts.find((part) => part.type === "media" && part.mime_type?.startsWith("audio/"));
+  if (audio?.id && audio.url) {
+    return {
+      id: event.event_id,
+      kind: "message",
+      from,
+      text,
+      audio: {
+        attachmentId: audio.id,
+        url: audio.url,
+        mimeType: audio.mime_type ?? "audio/*",
+        durationMs: audio.duration_ms ?? undefined,
+        sizeBytes: audio.size_bytes,
+      },
+    };
+  }
   return { id: event.event_id, kind: "message", from, text };
 }
 

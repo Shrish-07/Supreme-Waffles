@@ -3,7 +3,7 @@ import { loadConfig } from "../src/config";
 import type { CaseDetail, PatientNotification, Schemas } from "../src/coreClient";
 import type { CoreApi, HandlerContext } from "../src/handlers/context";
 import { handleIncoming } from "../src/handlers/incomingMessage";
-import { MockTranscriber } from "../src/handlers/transcription";
+import { MockTranscriber, type Transcriber } from "../src/handlers/transcription";
 import { MockRelayAdapter } from "../src/relayAdapter/mock";
 import { ConversationStore } from "../src/store";
 import type { InboundEvent } from "../src/webhook";
@@ -17,6 +17,8 @@ export class StubCore implements CoreApi {
   dispute: Record<string, unknown> | null = null;
   calls: Record<string, unknown>[] = [];
   ingested = 0;
+  visits: Schemas["VisitCreate"][] = [];
+  transcripts: Schemas["VisitComplete"][] = [];
 
   note(kind: PatientNotification["kind"], text: string, extra: Partial<PatientNotification> = {}) {
     this.notes.push({
@@ -35,10 +37,12 @@ export class StubCore implements CoreApi {
   async recordConsent(_caseId: string, body: Schemas["ConsentCreate"]) {
     return { consent_id: `cns_${body.consent_type}` } as Schemas["Consent"];
   }
-  async createVisit() {
+  async createVisit(body: Schemas["VisitCreate"]) {
+    this.visits.push(body);
     return { visit_id: "vis_1" } as Schemas["Visit"];
   }
-  async completeVisit() {
+  async completeVisit(_visitId: string, body: Schemas["VisitComplete"]) {
+    this.transcripts.push(body);
     this.state = "EVIDENCE_EXTRACTED";
     return { evidence: [{ description: "lorazepam (dose 1 mg)", negated: false }] } as Schemas["VisitEvidenceResult"];
   }
@@ -103,15 +107,15 @@ export class StubCore implements CoreApi {
   }
 }
 
-export function setup() {
+export function setup(options: { voiceMemos?: boolean; transcriber?: Transcriber; dataDir?: string } = {}) {
   const core = new StubCore();
-  const relay = new MockRelayAdapter();
+  const relay = new MockRelayAdapter(false, !options.voiceMemos);
   const ctx: HandlerContext = {
-    config: loadConfig({}),
+    config: loadConfig(options.dataDir ? { RELAY_DATA_DIR: options.dataDir } : {}),
     core,
     relay,
     store: new ConversationStore(),
-    transcriber: new MockTranscriber(),
+    transcriber: options.transcriber ?? new MockTranscriber(),
     log: () => undefined,
   };
   let counter = 0;

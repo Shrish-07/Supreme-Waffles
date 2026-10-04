@@ -28,6 +28,9 @@ export interface RelayConfig {
   relayAgentToken: string;
   relayWebhookSecret: string;
   relayApiBaseUrl: string;
+  /** xAI speech-to-text for visit voice memos (live mode only). */
+  xaiApiKey: string;
+  xaiSttUrl: string;
   dataDir: string;
 }
 
@@ -64,6 +67,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RelayConfig {
     relayAgentToken: get("RELAY_AGENT_TOKEN"),
     relayWebhookSecret: get("RELAY_WEBHOOK_SECRET"),
     relayApiBaseUrl: get("RELAY_API_BASE_URL"),
+    xaiApiKey: get("XAI_API_KEY"),
+    xaiSttUrl: get("XAI_STT_URL", "https://api.x.ai/v1/stt"),
     dataDir: get("RELAY_DATA_DIR", resolve(REPO_ROOT, "relay", "data")),
   };
   const missing: string[] = [];
@@ -71,6 +76,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RelayConfig {
     if (!config.relayAgentToken) missing.push("RELAY_MODE=live requires RELAY_AGENT_TOKEN");
     if (!config.relayWebhookSecret) missing.push("RELAY_MODE=live requires RELAY_WEBHOOK_SECRET");
     if (!config.relayApiBaseUrl) missing.push("RELAY_MODE=live requires RELAY_API_BASE_URL");
+    if (!config.xaiApiKey) missing.push("RELAY_MODE=live requires XAI_API_KEY (visit transcription)");
   }
   if (!config.serviceToken) missing.push("RELAY_SERVICE_TOKEN is required when APP_ENV=prod");
   if (!config.coreWebhookSecret) missing.push("CORE_WEBHOOK_SECRET is required when APP_ENV=prod");
