@@ -60,10 +60,9 @@ PROFILE_PATH = (
     Path(__file__).resolve().parents[1] / "agentverse" / "agent_profiles" / "orchestrator.md"
 )
 DESCRIPTION = (
-    "ClaimShield helps patients review healthcare bills by comparing claimed procedures "
-    "against patient-authorized health records, appointment evidence, and billing information. "
-    "It identifies potential discrepancies, asks the patient for confirmation when evidence is "
-    "uncertain, and prepares evidence-backed dispute packages."
+    "ClaimShield helps patients review healthcare bills by comparing billed lines against "
+    "patient-authorized health records and visit evidence, identifying discrepancies and "
+    "preparing evidence-backed dispute packages."
 )
 TIMEOUT_CHECK_S = 5.0
 ERROR_REPLY = "Sorry, something went wrong on my side. Reply STATUS to see where your case is."
