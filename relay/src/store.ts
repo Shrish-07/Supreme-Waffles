@@ -8,6 +8,7 @@ export type Stage =
   | "awaiting_data_consent"
   | "awaiting_recording_choice"
   | "recording"
+  | "processing_visit"
   | "ready_for_bill"
   | "awaiting_claim_id"
   | "in_review"

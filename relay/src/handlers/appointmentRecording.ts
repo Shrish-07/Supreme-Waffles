@@ -6,7 +6,8 @@
 import { BUTTONS, RECORDING_CONSENT_TEXT, copy } from "../ux/messages";
 import type { Conversation } from "../store";
 import { ingestRecording } from "./audioIngest";
-import { type HandlerContext, requireCase, say } from "./context";
+import type { Schemas } from "../coreClient";
+import { type HandlerContext, requireCase, say, serialize } from "./context";
 import { TranscriptionError } from "./transcription";
 
 export async function offerRecording(ctx: HandlerContext, convo: Conversation): Promise<void> {
@@ -94,7 +95,56 @@ export async function onRecordingCompleted(
   }
   // Core makes this retry-safe: an already-stored transcript just re-runs extraction.
   const result = await ctx.core.completeVisit(convo.visitId, transcript);
-  const noted = result.evidence.map((e) => e.description);
-  await say(ctx, convo, copy.transcriptReady(noted));
+  if (result.status === "pending") {
+    // FETCH_MODE=agentverse: the Visit Agent writes the evidence back to Core shortly.
+    // Core takes no bill before that, so the patient waits here.
+    convo.stage = "processing_visit";
+    void watchVisitEvidence(ctx, convo.userId);
+    return;
+  }
+  await showVisitNotes(ctx, convo, result.evidence);
+}
+
+async function showVisitNotes(
+  ctx: HandlerContext,
+  convo: Conversation,
+  evidence: Schemas["EvidenceItem"][],
+): Promise<void> {
+  await say(ctx, convo, copy.visitNotes(evidence));
   convo.stage = "ready_for_bill";
+}
+
+/** True (and the notes are shown) once the Visit Agent has recorded the visit's evidence. */
+export async function checkVisitEvidence(ctx: HandlerContext, convo: Conversation): Promise<boolean> {
+  const detail = await ctx.core.getCase(requireCase(convo));
+  if (detail.visit?.status !== "evidence_extracted") return false;
+  await showVisitNotes(ctx, convo, detail.evidence ?? []);
+  return true;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Poll Core in the background so the webhook returns now. If the agents are slow, any
+ * later message from the patient checks again (and survives a service restart). */
+export async function watchVisitEvidence(ctx: HandlerContext, userId: string): Promise<void> {
+  const deadline = Date.now() + ctx.config.visitWaitMs;
+  while (Date.now() < deadline) {
+    await sleep(ctx.config.visitPollMs);
+    try {
+      const settled = await serialize(userId, async () => {
+        const convo = ctx.store.get(userId);
+        if (convo.stage !== "processing_visit") return true;
+        const ready = await checkVisitEvidence(ctx, convo);
+        ctx.store.save();
+        return ready;
+      });
+      if (settled) return;
+    } catch (error) {
+      ctx.log(`visit evidence check failed: ${(error as Error).message}`);
+    }
+  }
+  await serialize(userId, async () => {
+    const convo = ctx.store.get(userId);
+    if (convo.stage === "processing_visit") await say(ctx, convo, copy.visitTakingLong);
+  }).catch((error: Error) => ctx.log(`could not send visit status: ${error.message}`));
 }

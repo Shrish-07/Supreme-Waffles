@@ -3,7 +3,12 @@ import { CoreError } from "../coreClient";
 import type { Conversation } from "../store";
 import { BUTTONS, copy } from "../ux/messages";
 import type { InboundEvent } from "../webhook";
-import { answerRecordingChoice, awaitVoiceMemo, onRecordingCompleted } from "./appointmentRecording";
+import {
+  answerRecordingChoice,
+  awaitVoiceMemo,
+  checkVisitEvidence,
+  onRecordingCompleted,
+} from "./appointmentRecording";
 import { answerOpenPrompt, captureClaimId, replyToNotification, reviewBill } from "./approvalFlow";
 import { answerDataConsent, askDataConsent } from "./consent";
 import { type HandlerContext, say, serialize } from "./context";
@@ -102,6 +107,9 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
       return await answerRecordingChoice(ctx, convo, choice);
     case "recording":
       return await awaitVoiceMemo(ctx, convo, choice);
+    case "processing_visit":
+      if (await checkVisitEvidence(ctx, convo)) return;
+      return await say(ctx, convo, copy.stillProcessingVisit);
     case "ready_for_bill":
       if (choice === BUTTONS.reviewBill.id || /review|bill/i.test(event.text ?? "")) {
         return await reviewBill(ctx, convo);

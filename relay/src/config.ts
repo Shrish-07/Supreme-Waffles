@@ -31,6 +31,9 @@ export interface RelayConfig {
   /** xAI speech-to-text for visit voice memos (live mode only). */
   xaiApiKey: string;
   xaiSttUrl: string;
+  /** With live agents, how often and how long to check whether visit evidence is ready. */
+  visitPollMs: number;
+  visitWaitMs: number;
   dataDir: string;
 }
 
@@ -69,6 +72,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RelayConfig {
     relayApiBaseUrl: get("RELAY_API_BASE_URL"),
     xaiApiKey: get("XAI_API_KEY"),
     xaiSttUrl: get("XAI_STT_URL", "https://api.x.ai/v1/stt"),
+    visitPollMs: Number(get("RELAY_VISIT_POLL_MS", "2000")),
+    visitWaitMs: Number(get("RELAY_VISIT_WAIT_MS", "90000")),
     dataDir: get("RELAY_DATA_DIR", resolve(REPO_ROOT, "relay", "data")),
   };
   const missing: string[] = [];

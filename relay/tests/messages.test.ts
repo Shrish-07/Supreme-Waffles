@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { PatientNotification } from "../src/coreClient";
-import { APPROVAL_BUTTONS, DATA_CONSENT_TEXT, QUESTION_BUTTONS, renderNotification } from "../src/ux/messages";
+import {
+  APPROVAL_BUTTONS,
+  DATA_CONSENT_TEXT,
+  QUESTION_BUTTONS,
+  copy,
+  listItems,
+  renderNotification,
+} from "../src/ux/messages";
 
 const base: PatientNotification = {
   notification_id: "ntf_1",
@@ -39,5 +46,24 @@ describe("renderNotification", () => {
   it("keeps consent wording long enough for Core (>= 10 chars) and question buttons stable", () => {
     expect(DATA_CONSENT_TEXT.length).toBeGreaterThan(10);
     expect(QUESTION_BUTTONS.map((b) => b.id)).toEqual(["YES", "NO", "NOT_SURE"]);
+  });
+});
+
+describe("visit notes", () => {
+  it("reads as a sentence, with ruled-out services as 'no ...'", () => {
+    const text = copy.visitNotes([
+      { description: "MRI with contrast" },
+      { description: "lorazepam (dose 1 mg)" },
+      { description: "NOT anesthesia", negated: true },
+    ]).text;
+    expect(text).toMatch(
+      /^Here's what I noted from your visit: MRI with contrast, lorazepam \(dose 1 mg\) and no anesthesia\.\n/,
+    );
+    expect(listItems(["a"])).toBe("a");
+    expect(listItems(["a", "b"])).toBe("a and b");
+  });
+
+  it("says so plainly when nothing billable was heard", () => {
+    expect(copy.visitNotes([]).text).toMatch(/^I went through your visit but didn't hear/);
   });
 });
