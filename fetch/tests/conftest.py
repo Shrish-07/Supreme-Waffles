@@ -4,12 +4,14 @@ import socket
 import threading
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 import uvicorn
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.demo_support import build_isolated_app, create_demo_visit, service_headers
@@ -52,10 +54,9 @@ def free_port() -> int:
         return sock.getsockname()[1]
 
 
-@pytest.fixture
-def live_core(tmp_path: Path) -> Iterator[dict[str, Any]]:
-    """Core served by uvicorn on a free port (real HTTP for the uAgents tests)."""
-    app = build_isolated_app(tmp_path / "live.db")
+@contextmanager
+def serve(app: FastAPI) -> Iterator[str]:
+    """Serve a Core app with uvicorn on a free port; yields its base URL."""
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)
@@ -63,12 +64,21 @@ def live_core(tmp_path: Path) -> Iterator[dict[str, Any]]:
     deadline = time.time() + 10
     while not server.started and time.time() < deadline:
         time.sleep(0.05)
-    base_url = f"http://127.0.0.1:{port}"
-    relay = service_headers(app.state.container.settings, ServiceName.RELAY)
-    setup = create_demo_visit(httpx.Client(base_url=base_url), relay, data_consent=False)
-    yield {"base_url": base_url, "relay": relay, **setup}
-    server.should_exit = True
-    thread.join(timeout=10)
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
+
+
+@pytest.fixture
+def live_core(tmp_path: Path) -> Iterator[dict[str, Any]]:
+    """Core served by uvicorn on a free port (real HTTP for the uAgents tests)."""
+    app = build_isolated_app(tmp_path / "live.db")
+    with serve(app) as base_url:
+        relay = service_headers(app.state.container.settings, ServiceName.RELAY)
+        setup = create_demo_visit(httpx.Client(base_url=base_url), relay, data_consent=False)
+        yield {"base_url": base_url, "relay": relay, **setup}
 
 
 def agent_settings(**overrides: Any) -> AgentSettings:

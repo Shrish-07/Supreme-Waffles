@@ -7,10 +7,12 @@ call a live Core over HTTP. Skipped when uagents is not installed.
 
 import asyncio
 import contextlib
+import socket
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -20,6 +22,7 @@ import pytest
 pytest.importorskip("uagents")
 
 from uagents import Agent, Bureau, Context, Protocol  # noqa: E402
+from uagents.dispatch import dispatcher  # noqa: E402
 from uagents_core.contrib.protocols.chat import (  # noqa: E402
     ChatAcknowledgement,
     ChatMessage,
@@ -28,10 +31,17 @@ from uagents_core.contrib.protocols.chat import (  # noqa: E402
 )
 from uagents_core.identity import Identity  # noqa: E402
 
+from app.demo_support import (  # noqa: E402
+    answer_open_questions,
+    build_isolated_app,
+    create_demo_visit,
+    service_headers,
+)
 from claimshield_contracts.agent_messages import (  # noqa: E402
     VisitEvidenceRequest,
     VisitEvidenceResponse,
 )
+from claimshield_contracts.enums import ServiceName  # noqa: E402
 from fetch.agents.local_direct import DEMO_CONVERSATION  # noqa: E402
 from fetch.agents.orchestrator import HELLO_REPLY, build_orchestrator  # noqa: E402
 from fetch.agents.run_all import build_bureau  # noqa: E402
@@ -42,7 +52,7 @@ from fetch.agents.settings import (  # noqa: E402
 )
 from fetch.agents.visit_agent import build_visit_agent  # noqa: E402
 
-from .conftest import SEEDS, agent_settings, free_port  # noqa: E402
+from .conftest import SEEDS, agent_settings, free_port, serve  # noqa: E402
 
 PROMPT_MARKERS = ("Reply", "reply **DONE**")
 
@@ -64,21 +74,22 @@ def _chat(text: str) -> ChatMessage:
     )
 
 
-def _run_bureau(
-    build: Callable[[], list[Agent]], done: Callable[[], bool], timeout_s: float
-) -> None:
-    """Run a Bureau in its own thread + event loop (like ``bureau.run()``) until ``done()``.
-    The Bureau cancels every task on its loop at shutdown, so it must not share a loop
-    with the test; agents are built inside that loop."""
+@contextlib.contextmanager
+def _bureau(build: Callable[[], list[Agent]], *, port: int | None = None) -> Iterator[None]:
+    """Run a Bureau in its own thread + event loop (like ``bureau.run()``) for the duration
+    of the block. The Bureau cancels every task on its loop at shutdown, so it must not
+    share a loop with the test; agents are built inside that loop."""
     handles: dict[str, Any] = {}
+    built: list[Agent] = []
     ready = threading.Event()
 
     def run() -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        built.extend(build())
         bureau = Bureau(
-            agents=build(),
-            port=free_port(),
+            agents=built,
+            port=port or free_port(),
             agentverse=OFFLINE_AGENTVERSE,
             shutdown_timeout=5,
             loop=loop,
@@ -91,11 +102,30 @@ def _run_bureau(
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
     assert ready.wait(30), "bureau did not start"
+    try:
+        yield
+    finally:
+        handles["loop"].call_soon_threadsafe(handles["task"].cancel)
+        thread.join(timeout=20)
+        # Every Agent registers itself in uAgents' process-global dispatcher and never
+        # unregisters; tests reuse seeds (same addresses), so stale agents would answer.
+        for agent in built:
+            dispatcher.unregister(agent.address, agent)
+
+
+def _wait_for(condition: Callable[[], bool], timeout_s: float) -> bool:
     deadline = time.time() + timeout_s
-    while not done() and time.time() < deadline:
+    while time.time() < deadline:
+        if condition():
+            return True
         time.sleep(0.2)
-    handles["loop"].call_soon_threadsafe(handles["task"].cancel)
-    thread.join(timeout=20)
+    return condition()
+
+
+def _listening(port: int) -> bool:
+    with contextlib.suppress(OSError), socket.create_connection(("127.0.0.1", port), 0.2):
+        return True
+    return False
 
 
 def _converse(
@@ -141,7 +171,8 @@ def _converse(
 
         return [*built, patient]
 
-    _run_bureau(agents, lambda: state["done"], timeout_s)
+    with _bureau(agents):
+        _wait_for(lambda: state["done"], timeout_s)
     return state
 
 
@@ -190,6 +221,53 @@ def test_full_workflow_over_uagents(agent_env: None, live_core: dict[str, Any]) 
     }
 
 
+def test_core_drives_the_agents_in_agentverse_mode(agent_env: None, tmp_path: Path) -> None:
+    """FETCH_MODE=agentverse: Core POSTs the orchestrator's REST /trigger, the orchestrator
+    dispatches typed requests, and the specialists write results back via /internal/tools."""
+    bureau_port = free_port()
+    app = build_isolated_app(
+        tmp_path / "agents.db",
+        fetch_mode="agentverse",
+        orchestrator_url=f"http://127.0.0.1:{bureau_port}",
+    )
+    relay = service_headers(app.state.container.settings, ServiceName.RELAY)
+    with serve(app) as base_url:
+        settings = agent_settings(core_base_url=base_url)
+
+        def agents() -> list[Agent]:
+            return list(build_bureau(settings, online=False)._agents)  # noqa: SLF001
+
+        with _bureau(agents, port=bureau_port):
+            assert _wait_for(lambda: _listening(bureau_port), 20), "orchestrator REST not up"
+            http = httpx.Client(base_url=base_url, headers=relay, timeout=30)
+            case_id = create_demo_visit(http, relay)["case_id"]
+
+            def state() -> str:
+                return http.get(f"/cases/{case_id}").json()["state"]
+
+            assert _wait_for(lambda: state() == "EVIDENCE_EXTRACTED", 30), state()
+            claim = http.post(
+                "/claims",
+                json={
+                    "case_id": case_id,
+                    "source": "finchnode",
+                    "finchnode_claim_id": "CLM-2026-0915-001",
+                },
+            ).json()
+            assert http.post(f"/claims/{claim['claim_id']}/analyze").json()["status"] == "pending"
+            assert _wait_for(lambda: state() == "AWAITING_PATIENT_INPUT", 30), state()
+            answer_open_questions(http, relay, case_id)
+            assert http.post("/disputes", json={"case_id": case_id}).json()["status"] == "pending"
+            assert _wait_for(lambda: state() == "AWAITING_APPROVAL", 30), state()
+            case = http.get(f"/cases/{case_id}").json()
+    assert len(case["findings"]) == 3 and len(case["dispute"]["items"]) == 3
+    assert {r["agent"] for r in case["agent_runs"]} >= {
+        "visit_agent",
+        "claim_agent",
+        "dispute_agent",
+    }
+
+
 def test_specialists_answer_only_the_orchestrator(
     agent_env: None, live_core: dict[str, Any]
 ) -> None:
@@ -228,7 +306,8 @@ def test_specialists_answer_only_the_orchestrator(
             first_answer[0] = time.time()
         return bool(first_answer and first_answer[0]) and time.time() - first_answer[0] > 1.5
 
-    _run_bureau(agents, done, timeout_s=30)
+    with _bureau(agents):
+        _wait_for(done, timeout_s=30)
     assert answered == {"orchestrator": ["req_orchestrator"], "stranger": []}
 
 

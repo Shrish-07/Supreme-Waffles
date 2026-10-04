@@ -13,7 +13,8 @@ They never touch the database or FinchNode directly.
 - [x] `local_direct.py` (`make chat`): the exact ASI:One conversation with no Agentverse
 - [x] `run_all.py`: Bureau (default) or `--processes`; `print_addresses.py`
 - [x] Seeds only from env, fail loudly if missing, never logged
-- [x] Tests: local_direct conversation, idempotency, allowlist, **real uAgents Bureau** (HELLO_WORLD + full workflow vs a live Core)
+- [x] Tests: local_direct conversation, idempotency, allowlist, **real uAgents Bureau** (HELLO_WORLD, full chat workflow vs a live Core, Core-driven `FETCH_MODE=agentverse` trigger path, specialists ignoring unknown senders)
+- [x] Safety: APPROVE / REJECT / DONE / CANCEL are exact-match commands; the orchestrator resumes from Core's state and never reviews a claim other than the one requested
 
 ## To implement for LIVE
 
@@ -23,7 +24,8 @@ They never touch the database or FinchNode directly.
    demo conversation in ASI:One (`docs/DEMO_SCRIPT.md`). Confirm `StartSessionContent` /
    `EndSessionContent` handling with ASI:One.
 3. Core → orchestrator trigger (`FETCH_MODE=agentverse`): Core POSTs `OrchestratorTrigger`
-   to `ORCHESTRATOR_URL/trigger`; replies for core-triggered work are only logged.
+   to `ORCHESTRATOR_URL/trigger`; replies for core-triggered work are only logged. Works
+   locally in a Bureau (tested); confirm it with the orchestrator on a mailbox.
 4. Optional: LLM fallback in `intent.py` for `UNKNOWN` intents (keep rules first).
 5. Optional: let the Dispute Agent polish letter prose with a larger model, as long as it
    adds **no facts** beyond the items and citations it was given.
