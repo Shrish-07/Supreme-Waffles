@@ -24,13 +24,14 @@ import subprocess
 import sys
 
 from uagents import Bureau
+from uagents_core.identity import Identity
 
 from claimshield_contracts.enums import AgentName
 
 from .claim_agent import build_claim_agent
 from .dispute_agent import build_dispute_agent
 from .orchestrator import PORT, build_orchestrator
-from .settings import OFFLINE_AGENTVERSE, AgentSettings
+from .settings import OFFLINE_AGENTVERSE, AgentSettings, require_seed
 from .visit_agent import build_visit_agent
 
 MODULES = ("orchestrator", "visit_agent", "claim_agent", "dispute_agent")
@@ -40,9 +41,15 @@ def build_bureau(settings: AgentSettings, *, online: bool = True) -> Bureau:
     """All agents in one Bureau. ``online=False``: no mailbox, nothing published, no
     Agentverse/Almanac traffic at all (tests and fully offline demos)."""
     agentverse = None if online else OFFLINE_AGENTVERSE
-    visit = build_visit_agent(settings, mailbox=False, agentverse=agentverse)
-    claim = build_claim_agent(settings, mailbox=False, agentverse=agentverse)
-    dispute = build_dispute_agent(settings, mailbox=False, agentverse=agentverse)
+    orchestrator_address = Identity.from_seed(require_seed("ORCHESTRATOR_SEED"), 0).address
+    specialist = {
+        "mailbox": False,
+        "agentverse": agentverse,
+        "orchestrator_address": orchestrator_address,
+    }
+    visit = build_visit_agent(settings, **specialist)
+    claim = build_claim_agent(settings, **specialist)
+    dispute = build_dispute_agent(settings, **specialist)
     orchestrator = build_orchestrator(
         settings,
         mailbox=online,

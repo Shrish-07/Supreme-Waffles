@@ -8,12 +8,13 @@ You own `relay/` (Node 20+ / TypeScript). The service talks **only** to Core's H
 - [x] HTTP server (`src/index.ts`, `src/app.ts`): `POST /webhook/relay`, `POST /internal/notify`, `GET /health`
 - [x] Typed Core client generated from Core's OpenAPI (`shared/ts/core.ts`) incl. signed events to `POST /relay/webhook`
 - [x] Inbound webhook: signature check (VERIFY scheme), durable idempotency ledger (`relay/data/events.json`), retry on failure
+- [x] Retry-safe handlers: a stage advances only after its step succeeds; case / visit / claim ids are saved as soon as Core returns them; events are serialized per patient; Core 4xx → patient message (no retry storm), 5xx → platform retry; malformed events → 400
 - [x] Conversation store persisted to `relay/data/conversations.json`
 - [x] Flow: welcome → FinchNode id → health-data consent → recording consent → (mock) recording → audio ingest → (mock) transcription → Core extracts evidence → "Review my bill" → claim number → analysis → **one question card at a time** (YES / NO / NOT SURE) → approval card (Review / Approve / Reject) → call → **handoff card** (Done / Cancel) → final report
-- [x] Core notifications rendered exactly once whether pushed (`/internal/notify`) or pulled (outbox)
+- [x] Core notifications rendered exactly once whether pushed (`/internal/notify`) or pulled (outbox); marked delivered only after a successful send, so a failed send is retried by the next pull
 - [x] Mock Relay adapter (outbox + console), mock transcriber (synthetic demo transcript)
 - [x] `npm run demo` drives the whole conversation against a running Core; CI runs it
-- [x] vitest: signing parity with Core, ledger, rendering, config, client, full handler flow
+- [x] vitest: signing parity with Core, ledger, rendering, config, client, full handler flow, failure handling (`tests/resilience.test.ts`)
 
 ## To implement for LIVE
 

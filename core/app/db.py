@@ -1,4 +1,7 @@
-"""Database engine/session helpers. Postgres in docker, SQLite everywhere else."""
+"""Database engine/session helpers. Postgres in docker, SQLite everywhere else.
+
+Engines use ``hide_parameters=True`` so SQL errors never echo PHI in logs.
+"""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -16,12 +19,14 @@ class Base(DeclarativeBase):
 def make_engine(url: str) -> Engine:
     """Create an engine. SQLite gets FK enforcement, WAL and a busy timeout."""
     if not url.startswith("sqlite"):
-        return create_engine(url, pool_pre_ping=True)
+        return create_engine(url, pool_pre_ping=True, hide_parameters=True)
 
     database = url.split("///", 1)[-1]
     if database and database != ":memory:":
         Path(database).parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(url, connect_args={"check_same_thread": False, "timeout": 30})
+    engine = create_engine(
+        url, connect_args={"check_same_thread": False, "timeout": 30}, hide_parameters=True
+    )
 
     @event.listens_for(engine, "connect")
     def _sqlite_pragmas(dbapi_connection, _record) -> None:  # type: ignore[no-untyped-def]

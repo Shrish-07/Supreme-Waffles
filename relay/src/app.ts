@@ -54,7 +54,13 @@ export function createApp(ctx: HandlerContext, ledger = new EventLedger(join(ctx
         if (ctx.config.mode === "live") {
           verifyPlatformSignature(ctx.config.relayWebhookSecret, raw, req.headers as Record<string, string>);
         }
-        const event = parsePlatformEvent(JSON.parse(raw));
+        let event;
+        try {
+          event = parsePlatformEvent(JSON.parse(raw));
+        } catch (error) {
+          // Malformed events would fail the same way on every retry.
+          return send(res, 400, { error: `malformed event: ${(error as Error).message}` });
+        }
         if (!ledger.claim(event.id)) return send(res, 200, { status: "duplicate" });
         try {
           await handleIncoming(ctx, event);

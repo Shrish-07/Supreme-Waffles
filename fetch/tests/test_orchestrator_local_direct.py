@@ -59,13 +59,39 @@ def test_consent_refusal_stops_without_reading_records(
     )
 
 
-def test_yes_is_not_an_approval(runner: LocalDirectRunner) -> None:
-    for text in DEMO_CONVERSATION[:5]:
-        runner.send(text)
+@pytest.mark.parametrize("text", ["yes", "I don't approve", "yes, I approve the letter only"])
+def test_only_an_exact_approve_authorizes(
+    runner: LocalDirectRunner, core: dict[str, Any], text: str
+) -> None:
+    for message in DEMO_CONVERSATION[:5]:
+        runner.send(message)
     assert runner.session.stage == Stage.AWAITING_APPROVAL
-    replies = runner.send("yes")
-    assert "please reply **APPROVE**" in replies[0]
+    replies = runner.send(text)
+    assert "reply exactly **APPROVE**" in replies[0]
     assert runner.session.stage == Stage.AWAITING_APPROVAL
+    case = _case(core)
+    assert case["state"] == "AWAITING_APPROVAL" and case["dispute"]["status"] == "awaiting_approval"
+
+
+def test_a_new_chat_resumes_the_case_where_it_stands(
+    runner: LocalDirectRunner, agent_env: None, core: dict[str, Any]
+) -> None:
+    for message in DEMO_CONVERSATION[:5]:
+        runner.send(message)
+    second = LocalDirectRunner(settings=agent_settings(), http=core["client"], sender="new-chat")
+    replies = second.send(DEMO_CONVERSATION[0])
+    assert second.session.case_id == runner.session.case_id
+    assert second.session.stage == Stage.AWAITING_APPROVAL
+    assert any("APPROVE" in reply for reply in replies)
+
+
+def test_a_different_claim_gets_its_own_case(
+    runner: LocalDirectRunner, agent_env: None, core: dict[str, Any]
+) -> None:
+    runner.send(DEMO_CONVERSATION[0])
+    second = LocalDirectRunner(settings=agent_settings(), http=core["client"], sender="other")
+    second.send("Please review fn_pat_demo_001 claim CLM-2026-0999-999")
+    assert second.session.case_id not in (None, runner.session.case_id)
 
 
 def test_rejecting_the_dispute(runner: LocalDirectRunner, core: dict[str, Any]) -> None:

@@ -34,7 +34,7 @@ Set `APP_ENV=prod` to disable the dev fallback tokens. All services read the sam
 |---|---|
 | Create an Agentverse account and an API key | `AGENTVERSE_API_KEY` |
 | Generate four seeds (`python -c "import secrets; print(secrets.token_hex(32))"`) | `ORCHESTRATOR_SEED`, `VISIT_AGENT_SEED`, `CLAIM_AGENT_SEED`, `DISPUTE_AGENT_SEED` |
-| Print the derived addresses: `make agent-addresses` | `VISIT_AGENT_ADDRESS`, `CLAIM_AGENT_ADDRESS`, `DISPUTE_AGENT_ADDRESS` |
+| Print the derived addresses: `make agent-addresses` | `VISIT_AGENT_ADDRESS`, `CLAIM_AGENT_ADDRESS`, `DISPUTE_AGENT_ADDRESS`, `ORCHESTRATOR_ADDRESS` (only needed with `run_all --processes`; the Bureau derives it) |
 | Optional public handle for the orchestrator | `ORCHESTRATOR_HANDLE` |
 | Discoverability check: `HELLO_WORLD=1`, then `make agents-hello`, connect the mailbox from the Agentverse inspector link, and chat with the agent in ASI:One | `HELLO_WORLD=1` |
 | Full workflow through agents | `FETCH_MODE=agentverse`, `HELLO_WORLD=0`, then `make agents` |

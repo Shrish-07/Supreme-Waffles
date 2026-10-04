@@ -13,6 +13,7 @@ Run:  python -m fetch.agents.orchestrator    (needs ORCHESTRATOR_SEED)
 
 import asyncio
 import hmac
+from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -43,8 +44,10 @@ from .protocols import REPLIES_PROTOCOL, protocol
 from .session import (
     CORE_TRIGGER_OWNER,
     ChatSession,
+    forget_request,
     load_session,
     owner_of_request,
+    pending_agent,
     pending_senders,
     register_request,
     save_session,
@@ -63,6 +66,7 @@ DESCRIPTION = (
     "uncertain, and prepares evidence-backed dispute packages."
 )
 TIMEOUT_CHECK_S = 5.0
+ERROR_REPLY = "Sorry, something went wrong on my side. Reply STATUS to see where your case is."
 
 
 def chat_text(text: str, *, end_session: bool = False) -> ChatMessage:
@@ -121,6 +125,10 @@ def build_orchestrator(
     # ---------------------------------------------------------------- chat (public)
     chat = Protocol(spec=chat_protocol_spec)
 
+    # One lock per chat sender: message handlers and the timeout sweep never
+    # interleave on the same session (to_thread() yields the event loop).
+    locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
     @chat.on_message(ChatMessage)
     async def on_chat(ctx: Context, sender: str, msg: ChatMessage) -> None:
         await ctx.send(
@@ -132,9 +140,14 @@ def build_orchestrator(
         text = msg.text()
         if not text.strip():
             return
-        session = load_session(ctx.storage, sender)
-        step = await asyncio.to_thread(brain.on_user_message, session, text)
-        await execute(ctx, session, step)
+        async with locks[sender]:
+            session = load_session(ctx.storage, sender)
+            try:
+                step = await asyncio.to_thread(brain.on_user_message, session, text)
+            except Exception:  # the user must always get an answer
+                ctx.logger.exception("chat handling failed")
+                step = Step([ERROR_REPLY])
+            await execute(ctx, session, step)
 
     @chat.on_message(ChatAcknowledgement)
     async def on_ack(ctx: Context, sender: str, msg: ChatAcknowledgement) -> None:
@@ -147,12 +160,25 @@ def build_orchestrator(
 
     async def on_reply(ctx: Context, sender: str, msg: AgentResponse) -> None:
         owner = owner_of_request(ctx.storage, msg.request_id)
-        if owner is None or owner == CORE_TRIGGER_OWNER:
-            ctx.logger.info(f"{type(msg).__name__} for case {msg.case_id} (ok={msg.ok})")
+        if owner is None:
+            ctx.logger.info(f"ignoring unsolicited {type(msg).__name__}")
             return
-        session = load_session(ctx.storage, owner)
-        step = await asyncio.to_thread(brain.on_agent_response, session, msg)
-        await execute(ctx, session, step)
+        if owner == CORE_TRIGGER_OWNER:
+            ctx.logger.info(f"{type(msg).__name__} for a Core trigger (ok={msg.ok})")
+            forget_request(ctx.storage, msg.request_id)
+            return
+        async with locks[owner]:
+            session = load_session(ctx.storage, owner)
+            agent_name = pending_agent(session, msg.request_id)
+            if agent_name is None or routes.get(AgentName(agent_name)) != sender:
+                ctx.logger.warning(f"ignoring {type(msg).__name__} from an unexpected sender")
+                return
+            try:
+                step = await asyncio.to_thread(brain.on_agent_response, session, msg)
+            except Exception:
+                ctx.logger.exception("agent reply handling failed")
+                step = Step([ERROR_REPLY])
+            await execute(ctx, session, step)
 
     for model in (VisitEvidenceResponse, ClaimAnalysisResponse, DisputeResponse):
         replies.on_message(model)(on_reply)
@@ -161,10 +187,11 @@ def build_orchestrator(
     @agent.on_interval(period=TIMEOUT_CHECK_S)
     async def check_timeouts(ctx: Context) -> None:
         for sender in pending_senders(ctx.storage):
-            session = load_session(ctx.storage, sender)
-            step = brain.on_timeouts(session)
-            if step.replies:
-                await execute(ctx, session, step)
+            async with locks[sender]:
+                session = load_session(ctx.storage, sender)
+                step = brain.on_timeouts(session)
+                if step.replies:
+                    await execute(ctx, session, step)
 
     # ---------------------------------------------------------------- Core trigger (REST)
     @agent.on_rest_post("/trigger", OrchestratorTrigger, OrchestratorTriggerAck)

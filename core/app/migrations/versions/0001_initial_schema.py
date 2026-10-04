@@ -2,7 +2,7 @@
 
 Revision ID: 0001
 Revises:
-Create Date: 2026-10-03 20:17:34.124003
+Create Date: 2026-10-03 21:57:43.100789
 """
 
 from collections.abc import Sequence
@@ -62,6 +62,7 @@ def upgrade() -> None:
         sa.Column("patient_state", sa.String(length=2), nullable=True),
         sa.Column("external_ref", sa.String(length=120), nullable=True),
         sa.Column("failure_reason", sa.Text(), nullable=True),
+        sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
@@ -100,7 +101,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     with op.batch_alter_table("claims", schema=None) as batch_op:
-        batch_op.create_index(batch_op.f("ix_claims_case_id"), ["case_id"], unique=False)
+        batch_op.create_index(batch_op.f("ix_claims_case_id"), ["case_id"], unique=True)
         batch_op.create_index(
             batch_op.f("ix_claims_external_claim_id"), ["external_claim_id"], unique=False
         )
@@ -249,7 +250,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     with op.batch_alter_table("disputes", schema=None) as batch_op:
-        batch_op.create_index(batch_op.f("ix_disputes_case_id"), ["case_id"], unique=False)
+        batch_op.create_index(batch_op.f("ix_disputes_case_id"), ["case_id"], unique=True)
 
     op.create_table(
         "visits",
@@ -274,7 +275,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     with op.batch_alter_table("visits", schema=None) as batch_op:
-        batch_op.create_index(batch_op.f("ix_visits_case_id"), ["case_id"], unique=False)
+        batch_op.create_index(batch_op.f("ix_visits_case_id"), ["case_id"], unique=True)
 
     op.create_table(
         "call_sessions",

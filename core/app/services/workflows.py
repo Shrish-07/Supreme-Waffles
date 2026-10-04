@@ -20,13 +20,15 @@ from claimshield_contracts.enums import (
     Channel,
     HandoffChoice,
     HumanReason,
+    VisitStatus,
     WorkStatus,
 )
 from claimshield_contracts.models import HumanIntervention
 
 from .. import mappers
+from ..adapters.fetch_bridge.base import BridgeResult
 from ..errors import Conflict, InvalidInput, NotFound
-from ..models_db import CallRow, DecisionRow
+from ..models_db import CallRow, DecisionRow, FindingRow
 from . import claim_service, evidence_service, human_service, notification_service
 from .case_service import get_case_row, latest_dispute
 
@@ -37,11 +39,23 @@ if TYPE_CHECKING:
 def complete_visit(
     container: "Container", *, visit_id: str, body: VisitComplete, actor: str
 ) -> VisitEvidenceResult:
-    """Store the transcript, then let the Visit logic extract evidence."""
+    """Store the transcript, then let the Visit logic extract evidence.
+
+    Retry-safe: if the transcript was stored but extraction failed, a retry re-runs
+    extraction on the stored transcript (the new body is ignored); once evidence
+    exists the call just returns it.
+    """
     with container.session_scope() as db:
-        evidence_service.complete_visit(db, visit_id=visit_id, body=body, actor=actor)
-        case_id = evidence_service.get_visit_row(db, visit_id).case_id
-    bridge = container.fetch_bridge.extract_visit_evidence(case_id, visit_id)
+        visit = evidence_service.get_visit_row(db, visit_id)
+        if visit.transcript_id is None:
+            evidence_service.complete_visit(db, visit_id=visit_id, body=body, actor=actor)
+        needs_extraction = visit.status != VisitStatus.EVIDENCE_EXTRACTED.value
+        case_id = visit.case_id
+    bridge = (
+        container.fetch_bridge.extract_visit_evidence(case_id, visit_id)
+        if needs_extraction
+        else BridgeResult(status=WorkStatus.COMPLETED)
+    )
     with container.session_scope() as db:
         visit = evidence_service.get_visit_row(db, visit_id)
         return VisitEvidenceResult(
@@ -158,8 +172,14 @@ def request_human(
         return container.voice_manager.request_handoff(
             call_id, reason=reason, detail=prompt, actor=actor
         )
+    if reason == HumanReason.PATIENT_CONFIRMATION:
+        raise InvalidInput("Patient confirmations are created by Core from findings.")
     with container.session_scope() as db:
         case = get_case_row(db, case_id)
+        if finding_id is not None:
+            finding = db.get(FindingRow, finding_id)
+            if finding is None or finding.case_id != case.id:
+                raise InvalidInput("finding_id does not belong to case_id")
         row = human_service.create_intervention(
             db,
             case_id=case.id,

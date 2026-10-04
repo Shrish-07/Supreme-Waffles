@@ -25,7 +25,7 @@ TRANSITIONS: dict[S, frozenset[S]] = {
     S.FINDINGS_CONFIRMED: frozenset({S.DISPUTE_PREPARED}),
     S.DISPUTE_PREPARED: frozenset({S.AWAITING_APPROVAL}),
     S.AWAITING_APPROVAL: frozenset({S.APPROVED, S.REJECTED}),
-    S.APPROVED: frozenset({S.CALL_IN_PROGRESS}),
+    S.APPROVED: frozenset({S.CALL_IN_PROGRESS, S.RESOLVED}),
     S.CALL_IN_PROGRESS: frozenset({S.HUMAN_REQUIRED, S.RESOLVED}),
     S.HUMAN_REQUIRED: frozenset({S.CALL_IN_PROGRESS, S.RESOLVED}),
     S.RESOLVED: frozenset(),
@@ -146,6 +146,10 @@ GUARDS: dict[tuple[S, S], Guard] = {
         lambda c: c.dispute_status == DisputeStatus.REJECTED, "dispute must be rejected"
     ),
     (S.APPROVED, S.CALL_IN_PROGRESS): _call_authorized,
+    (S.APPROVED, S.RESOLVED): _requires(
+        lambda c: c.dispute_status == DisputeStatus.APPROVED and not c.patient_authorization_id,
+        "only a dispute approved without call authorization resolves without a call",
+    ),
     (S.CALL_IN_PROGRESS, S.HUMAN_REQUIRED): _requires(
         lambda c: c.open_call_interventions > 0, "no open call intervention"
     ),

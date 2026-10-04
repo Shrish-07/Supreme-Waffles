@@ -5,8 +5,8 @@ import { offerRecording } from "./appointmentRecording";
 import { type HandlerContext, requireCase, say } from "./context";
 
 export async function askDataConsent(ctx: HandlerContext, convo: Conversation): Promise<void> {
-  convo.stage = "awaiting_data_consent";
   await say(ctx, convo, copy.dataConsent());
+  convo.stage = "awaiting_data_consent";
 }
 
 export async function answerDataConsent(
@@ -24,8 +24,8 @@ export async function answerDataConsent(
     return;
   }
   if (choice === BUTTONS.consentNo.id || choice === "NO") {
-    convo.stage = "done";
     await say(ctx, convo, copy.consentDeclined);
+    convo.stage = "done";
     return;
   }
   await say(ctx, convo, copy.notUnderstood);

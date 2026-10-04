@@ -11,6 +11,7 @@ from claimshield_contracts.enums import (
     ClaimSource,
     ConsentType,
     FindingStatus,
+    PatientAnswer,
     WorkStatus,
 )
 from claimshield_contracts.ids import new_id
@@ -152,6 +153,25 @@ def _has_findings(db: Session, case_id: str) -> bool:
     )
 
 
+def _validate_findings(
+    findings: list[DisputeCandidate], assessments: list[LineAssessment], line_ids: set[str]
+) -> None:
+    """Reject malformed agent output with 422 (never a DB integrity error)."""
+    if len({f.finding_id for f in findings}) != len(findings):
+        raise InvalidInput("Duplicate finding ids")
+    for item in [*findings, *assessments]:
+        if item.claim_line_id not in line_ids:
+            raise InvalidInput("A finding or line assessment references an unknown claim line")
+    for finding in findings:
+        if not finding.human_confirmation_required:
+            continue
+        if finding.confirmation is None:
+            raise InvalidInput("A finding that needs confirmation has no question")
+        missing = set(PatientAnswer) - set(finding.confirmation.effects)
+        if missing or set(finding.confirmation.options) - set(finding.confirmation.effects):
+            raise InvalidInput("Every confirmation answer needs an effect (YES / NO / NOT_SURE)")
+
+
 def record_findings(
     db: Session,
     container: "Container",
@@ -169,12 +189,7 @@ def record_findings(
         raise InvalidInput("claim_id does not belong to case_id")
     if _has_findings(db, case_id) or case.state != CaseState.CLAIM_RECEIVED.value:
         raise Conflict("This claim was already analyzed.", code="already_analyzed")
-    line_ids = {line.id for line in claim_lines(db, claim.id)}
-    for finding in findings:
-        if finding.claim_line_id not in line_ids:
-            raise InvalidInput(f"Finding {finding.finding_id} references an unknown claim line")
-        if finding.human_confirmation_required and finding.confirmation is None:
-            raise InvalidInput(f"Finding {finding.finding_id} needs a confirmation question")
+    _validate_findings(findings, assessments, {line.id for line in claim_lines(db, claim.id)})
 
     db.add_all(
         LineAssessmentRow(

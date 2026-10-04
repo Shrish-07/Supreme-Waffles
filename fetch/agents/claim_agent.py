@@ -24,6 +24,7 @@ def build_claim_agent(
     tools: CoreClient | None = None,
     mailbox: bool = True,
     agentverse: str | None = None,
+    orchestrator_address: str | None = None,
 ) -> Agent:
     settings = settings or AgentSettings.from_env()
     deps = ClaimLogicDeps(
@@ -38,7 +39,11 @@ def build_claim_agent(
         request_model=ClaimAnalysisRequest,
         response_model=ClaimAnalysisResponse,
         handle=lambda client, msg: handle_claim_analysis_request(client, msg, deps),
+        on_error=lambda msg, error: ClaimAnalysisResponse(
+            request_id=msg.request_id, case_id=msg.case_id, ok=False, error=error
+        ),
         settings=settings,
+        orchestrator_address=orchestrator_address or settings.orchestrator_address,
         tools=tools,
         mailbox=mailbox,
         agentverse=agentverse,

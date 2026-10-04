@@ -44,4 +44,5 @@ class RelayServiceNotifier(PatientNotifier):
                 extra={"fields": {"case_id": case.case_id, "error": type(exc).__name__}},
             )
             return DeliveryResult(delivered=False, error=type(exc).__name__)
-        return DeliveryResult(delivered=True, ref=response.json().get("delivery_ref"))
+        body = response.json()
+        return DeliveryResult(delivered=bool(body.get("delivered", True)), ref=body.get("delivery_ref"))

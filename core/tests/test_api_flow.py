@@ -27,20 +27,20 @@ def test_call_blocked_while_awaiting_approval(
     assert response.json()["detail"]["code"] == "illegal_transition"
 
 
-def test_call_blocked_without_call_authorization(
+def test_letter_only_approval_resolves_and_never_calls(
     client: TestClient, relay: dict[str, str], awaiting_approval: dict[str, Any]
 ) -> None:
+    case_id = awaiting_approval["case_id"]
     dispute_id = awaiting_approval["dispute"]["dispute_id"]
     approved = client.post(
         f"/disputes/{dispute_id}/approve", json={**APPROVAL, "authorize_call": False}, headers=relay
     ).json()
     assert approved["status"] == "approved" and approved["patient_authorization_id"] is None
-    response = client.post(
-        "/voice/start", json={"case_id": awaiting_approval["case_id"]}, headers=relay
-    )
+    case = client.get(f"/cases/{case_id}", headers=relay).json()
+    assert case["state"] == "RESOLVED" and case["calls"] == []
+    response = client.post("/voice/start", json={"case_id": case_id}, headers=relay)
     assert response.status_code == 409
-    detail = response.json()["detail"]
-    assert detail["code"] == "guard_failed" and "patient_authorization_id" in detail["message"]
+    assert response.json()["detail"]["code"] == "illegal_transition"
 
 
 def test_only_the_patient_can_approve(

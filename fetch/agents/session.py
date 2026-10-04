@@ -37,6 +37,8 @@ class KeyValueStore(Protocol):
 
     def set(self, key: str, value: Any) -> None: ...
 
+    def remove(self, key: str) -> None: ...
+
 
 class MemoryStore:
     def __init__(self) -> None:
@@ -47,6 +49,9 @@ class MemoryStore:
 
     def set(self, key: str, value: Any) -> None:
         self._data[key] = value
+
+    def remove(self, key: str) -> None:
+        self._data.pop(key, None)
 
 
 @dataclass
@@ -94,6 +99,12 @@ def load_session(store: KeyValueStore, sender: str) -> ChatSession:
 
 
 def save_session(store: KeyValueStore, session: ChatSession) -> None:
+    """Persist the session; index new pending requests and drop finished ones."""
+    previous = store.get(SESSION_PREFIX + session.sender) or {}
+    current = {p.request_id for p in session.pending}
+    for old in previous.get("pending", []):
+        if old["request_id"] not in current:
+            forget_request(store, old["request_id"])
     store.set(SESSION_PREFIX + session.sender, session.to_dict())
     for pending in session.pending:
         register_request(store, pending.request_id, session.sender)
@@ -111,6 +122,17 @@ def register_request(store: KeyValueStore, request_id: str, owner: str) -> None:
 
 def owner_of_request(store: KeyValueStore, request_id: str) -> str | None:
     return store.get(REQUEST_PREFIX + request_id)
+
+
+def forget_request(store: KeyValueStore, request_id: str) -> None:
+    """uAgents rewrites its whole storage file per write, so keys must not pile up."""
+    if store.get(REQUEST_PREFIX + request_id) is not None:
+        store.remove(REQUEST_PREFIX + request_id)
+
+
+def pending_agent(session: ChatSession, request_id: str) -> str | None:
+    """Which agent a pending request was sent to (used to verify the replier)."""
+    return next((p.agent for p in session.pending if p.request_id == request_id), None)
 
 
 def pending_senders(store: KeyValueStore) -> list[str]:

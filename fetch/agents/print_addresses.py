@@ -1,6 +1,6 @@
 """Print agent addresses derived from the *_SEED env vars (never prints seeds).
 
-make agent-addresses   ->  paste VISIT/CLAIM/DISPUTE_AGENT_ADDRESS into .env
+make agent-addresses   ->  paste the *_ADDRESS lines into .env
 """
 
 from uagents_core.identity import Identity

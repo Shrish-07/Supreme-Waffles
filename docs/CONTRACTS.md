@@ -111,6 +111,11 @@ Protocols (`fetch/agents/protocols.py`): `claimshield-visit-evidence`, `claimshi
 `claimshield-dispute`, `claimshield-orchestrator-replies`. The orchestrator also speaks the
 Fetch chat protocol (`AgentChatProtocol` 0.3.0) and always acknowledges.
 
+Sender rules: specialists answer only `ORCHESTRATOR_ADDRESS` (set it with
+`make agent-addresses`; the Bureau derives it from `ORCHESTRATOR_SEED`). The orchestrator
+accepts a `*Response` only from the agent its `request_id` was sent to. A specialist always
+replies: an unexpected error becomes `ok=false` with a generic `error`.
+
 **Changing any field or any message docstring changes the schema digest.** Bump
 `AGENT_PROTOCOL_VERSION`, rewrite the lock (`write_digest_lock()`), and restart every agent.
 
@@ -165,9 +170,19 @@ Body: `{"detail": {"code": "<code>", "message": "...", ...extra}}`.
 | 401 | `unauthorized`, `invalid_signature` |
 | 403 | `insufficient_scope`, `forbidden` |
 | 404 | `not_found` |
-| 409 | `illegal_transition`, `guard_failed` (with `from_state`/`to_state`), `consent_required`, `already_analyzed`, `already_resolved`, `already_recorded`, `claim_exists`, `visit_exists`, `transcript_exists`, `dispute_exists`, `not_awaiting_approval`, `not_ready_for_dispute`, `no_dispute`, `call_not_active`, `number_not_allowed`, `safety_blocked` |
-| 422 | request validation, `invalid_input`, `sensitive_data_rejected` |
-| 502 | `upstream_error`, `agent_failed`, `orchestrator_unreachable` |
+| 409 | `illegal_transition`, `guard_failed` (with `from_state`/`to_state`), `consent_required`, `already_analyzed`, `already_resolved`, `already_recorded`, `claim_exists`, `visit_exists`, `transcript_exists`, `dispute_exists`, `not_awaiting_approval`, `not_ready_for_dispute`, `no_dispute`, `call_not_active`, `number_not_allowed`, `safety_blocked`, `concurrent_update` (optimistic lock lost: re-read and retry), `conflict` (unique-constraint violation; SQL is never echoed) |
+| 422 | request validation, `invalid_input`, `sensitive_data_rejected` (the offending value is never echoed) |
+| 502 | `upstream_error`, `agent_failed`, `orchestrator_unreachable`, `finchnode_unavailable` |
+
+### Retries and idempotency
+
+| Call | On retry |
+|---|---|
+| `POST /visits/{id}/complete` | the first stored transcript is kept (a retry body is ignored); extraction re-runs only if it had not finished |
+| `POST /claims/{id}/analyze`, `POST /disputes` | return the stored result. `status: pending` (agentverse mode) means agents are working and Core will notify the patient |
+| `POST /relay/webhook` | `event_id` processed once |
+| `POST /voice/start` | a second start is refused (409); the case allows one call |
+| Relay service `POST /webhook/relay` | platform event ids are deduped in a durable ledger. If handling fails (Core 5xx or network), the id is released and a 500 asks the platform to retry. Core 4xx → the patient is told and the platform gets 200. Malformed events → 400 |
 
 ## 9. Versioning
 

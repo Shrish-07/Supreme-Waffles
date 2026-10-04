@@ -61,7 +61,9 @@ Rehearse the identical conversation offline first with `make chat`.
   orchestrator keeps its mailbox; the Bureau serves its REST `/trigger` on port 8000.
 - `python -m fetch.agents.run_all --processes`: one process per agent (ports 8000-8003).
   Each agent uses its own mailbox; the orchestrator needs `VISIT/CLAIM/DISPUTE_AGENT_ADDRESS`
-  in `.env`. VERIFY against current docs that mailbox agents resolve each other.
+  and every specialist needs `ORCHESTRATOR_ADDRESS` in `.env` (they answer no one else
+  and refuse to start without it). VERIFY against current docs that mailbox agents
+  resolve each other.
 
 ## 4. How it maps to code
 

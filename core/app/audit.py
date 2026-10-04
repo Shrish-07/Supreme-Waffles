@@ -12,6 +12,7 @@ Audit details should contain ids, types and counts -- never free text.
 import json
 import logging
 import re
+import traceback
 from datetime import UTC, datetime
 from typing import Any
 
@@ -94,7 +95,7 @@ def mask_member_ref(member_ref: str | None) -> str | None:
 
 
 class PhiRedactingFilter(logging.Filter):
-    """Redacts the rendered message and structured ``fields`` of every record."""
+    """Redacts the message, structured ``fields`` and traceback text of every record."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.msg = redact_text(record.getMessage())
@@ -102,6 +103,9 @@ class PhiRedactingFilter(logging.Filter):
         fields = getattr(record, "fields", None)
         if isinstance(fields, dict):
             record.fields = redact(fields)
+        if record.exc_info and not record.exc_text:
+            # Formatters reuse exc_text, so the traceback is redacted exactly once here.
+            record.exc_text = redact_text("".join(traceback.format_exception(*record.exc_info)))
         return True
 
 
@@ -123,18 +127,25 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
+# Loggers that ship their own handlers (uvicorn configures these before the app factory runs).
+THIRD_PARTY_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access", "sqlalchemy", "httpx")
+
+
 def configure_logging(level: str = "INFO") -> None:
-    """Install JSON + redaction on the root logger (idempotent)."""
+    """Install JSON + redaction on the root logger and redaction on third-party
+    handlers (idempotent)."""
     root = logging.getLogger()
     root.setLevel(level.upper())
-    for handler in root.handlers:
-        if getattr(handler, "_claimshield", False):
-            return
-    handler = logging.StreamHandler()
-    handler.setFormatter(JsonFormatter())
-    handler.addFilter(PhiRedactingFilter())
-    handler._claimshield = True  # type: ignore[attr-defined]
-    root.addHandler(handler)
+    if not any(getattr(h, "_claimshield", False) for h in root.handlers):
+        handler = logging.StreamHandler()
+        handler.setFormatter(JsonFormatter())
+        handler.addFilter(PhiRedactingFilter())
+        handler._claimshield = True  # type: ignore[attr-defined]
+        root.addHandler(handler)
+    for name in THIRD_PARTY_LOGGERS:
+        for handler in logging.getLogger(name).handlers:
+            if not any(isinstance(f, PhiRedactingFilter) for f in handler.filters):
+                handler.addFilter(PhiRedactingFilter())
 
 
 _log = logging.getLogger("claimshield.audit")

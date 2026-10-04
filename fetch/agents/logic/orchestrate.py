@@ -5,6 +5,9 @@ ClaimAnalysisRequest -> findings summary -> one confirmation question at a time 
 "prepare a dispute?" -> DisputeRequest(prepare) -> APPROVE / REJECT ->
 DisputeRequest(start_call) -> handoff (DONE) -> final report.
 
+A case may have progressed through another interface (Relay) or an earlier chat;
+``_resume`` always continues from Core's current state instead of assuming one.
+
 Every inter-agent message is typed; chat text is rendered here from typed data.
 The uAgent wrapper (orchestrator.py) and local_direct.py both drive this class.
 """
@@ -39,7 +42,7 @@ from claimshield_contracts.enums import (
     PatientDecision,
 )
 from claimshield_contracts.ids import new_id
-from claimshield_contracts.models import CaseDetail, HumanIntervention
+from claimshield_contracts.models import CaseDetail, Dispute, HumanIntervention
 from claimshield_contracts.tool_api import (
     CoreToolError,
     CoreTools,
@@ -174,6 +177,7 @@ class ChatOrchestrator:
             Stage.CONFIRMING: self._confirm,
             Stage.AWAITING_DISPUTE_OK: self._dispute_ok,
             Stage.AWAITING_APPROVAL: self._approval,
+            Stage.CALLING: self._calling,
             Stage.AWAITING_HANDOFF: self._handoff,
             Stage.DONE: self._after_done,
             Stage.ERROR: self._after_error,
@@ -182,8 +186,8 @@ class ChatOrchestrator:
 
     def on_agent_response(self, session: ChatSession, response: AgentResponse) -> Step:
         pending = next((p for p in session.pending if p.request_id == response.request_id), None)
-        if pending is None:
-            return Step()
+        if pending is None or response.case_id != session.case_id:
+            return Step()  # unknown, late, or for another case: ignore
         session.pending.remove(pending)
         if not response.ok:
             session.stage = Stage.ERROR
@@ -208,7 +212,9 @@ class ChatOrchestrator:
         session.pending = [p for p in session.pending if p not in expired]
         session.stage = Stage.ERROR
         label = AGENT_LABELS.get(expired[0].agent, expired[0].agent)
-        return Step([f"Sorry, the {label} didn't answer in time. Reply RESTART to try again."])
+        return Step(
+            [f"Sorry, the {label} didn't answer in time. Reply STATUS, or RESTART to try again."]
+        )
 
     # ------------------------------------------------------------------ helpers
 
@@ -236,11 +242,8 @@ class ChatOrchestrator:
 
     @staticmethod
     def _payer(case: CaseDetail) -> str:
-        return (
-            case.patient.payer_name
-            or (case.claim.payer_name if case.claim else None)
-            or "your insurer"
-        )
+        claim_payer = case.claim.payer_name if case.claim else None
+        return case.patient.payer_name or claim_payer or "your insurer"
 
     @staticmethod
     def _open(case: CaseDetail, *, call: bool) -> list[HumanIntervention]:
@@ -276,6 +279,14 @@ class ChatOrchestrator:
         )
         session.case_id = found.case.case_id
         case = self._case(session)
+        if case.claim and case.claim.external_claim_id != session.external_claim_id:
+            session.stage = Stage.DONE  # never review (or dispute) a different claim
+            return Step(
+                [
+                    f"Your open ClaimShield case covers claim {case.claim.external_claim_id}, "
+                    f"not {session.external_claim_id}. Reply RESTART and send that claim number."
+                ]
+            )
         if case.has_consent(ConsentType.HEALTH_DATA_ACCESS):
             return self._start_review(session, case, Step())
         session.stage = Stage.AWAITING_CONSENT
@@ -309,8 +320,7 @@ class ChatOrchestrator:
         return Step(["Please reply **YES** to consent or **NO** to stop."])
 
     def _start_review(self, session: ChatSession, case: CaseDetail, step: Step) -> Step:
-        if case.findings:  # analyzed through another interface (e.g. Relay)
-            session.claim_id = case.claim.claim_id if case.claim else None
+        if case.findings:  # analyzed already (another interface or an earlier chat)
             return self._present_findings(session, case, step)
         claim = case.claim or self.tools.ingest_claim(
             IngestClaimRequest(
@@ -357,7 +367,9 @@ class ChatOrchestrator:
             step,
             AgentName.CLAIM_AGENT,
             ClaimAnalysisRequest(
-                request_id=new_id("request"), case_id=response.case_id, claim_id=session.claim_id
+                request_id=new_id("request"),
+                case_id=session.case_id or "",
+                claim_id=session.claim_id,
             ),
         )
         return step
@@ -365,6 +377,7 @@ class ChatOrchestrator:
     # ------------------------------------------------------------------ stages: findings
 
     def _present_findings(self, session: ChatSession, case: CaseDetail, step: Step) -> Step:
+        session.claim_id = case.claim.claim_id if case.claim else session.claim_id
         if not case.findings:
             session.stage = Stage.DONE
             step.end_session = True
@@ -379,9 +392,10 @@ class ChatOrchestrator:
             f"{i}. {f.title} ({money(f.amount_cents)})" for i, f in enumerate(case.findings, 1)
         ]
         step.say("\n".join(lines))
-        return self._next_question_or_offer(session, case, step)
+        return self._resume(session, case, step)
 
-    def _next_question_or_offer(self, session: ChatSession, case: CaseDetail, step: Step) -> Step:
+    def _resume(self, session: ChatSession, case: CaseDetail, step: Step) -> Step:
+        """Continue from Core's current state (never assume where the case is)."""
         questions = self._open(case, call=False)
         if questions:
             session.stage = Stage.CONFIRMING
@@ -396,9 +410,29 @@ class ChatOrchestrator:
                 f"Items to dispute ({total}):\n{listing}\n\n"
                 "Shall I prepare a dispute package? Reply YES or NO."
             )
-        session.stage = Stage.DONE
-        step.end_session = True
-        return step.say("Based on your answers there is nothing to dispute on this bill.")
+        if case.state in (CaseState.DISPUTE_PREPARED, CaseState.AWAITING_APPROVAL) and case.dispute:
+            session.dispute_id = case.dispute.dispute_id
+            session.stage = Stage.AWAITING_APPROVAL
+            return step.say(self._package_text(case.dispute, self._payer(case)))
+        if case.state == CaseState.APPROVED and case.dispute:
+            session.dispute_id = case.dispute.dispute_id
+            session.stage = Stage.CALLING
+            self._send(
+                session,
+                step,
+                AgentName.DISPUTE_AGENT,
+                DisputeRequest(
+                    request_id=new_id("request"),
+                    case_id=case.case_id,
+                    action=DISPUTE_ACTION_START_CALL,
+                    dispute_id=case.dispute.dispute_id,
+                ),
+            )
+            return step.say(f"Your dispute is approved. Calling {self._payer(case)} now...")
+        report = self._report(session, case)
+        step.replies.extend(report.replies)
+        step.end_session = report.end_session
+        return step
 
     def _confirm(self, session: ChatSession, intent: Intent, text: str) -> Step:
         if intent.kind != IntentKind.ANSWER:
@@ -412,7 +446,7 @@ class ChatOrchestrator:
             )
         )
         session.open_question_id = None
-        return self._next_question_or_offer(session, self._case(session), Step(["Got it."]))
+        return self._resume(session, self._case(session), Step(["Got it."]))
 
     # ------------------------------------------------------------------ stages: dispute
 
@@ -439,22 +473,26 @@ class ChatOrchestrator:
         return Step(["Reply YES to prepare the dispute package, or NO."])
 
     def _dispute_ready(self, session: ChatSession, response: DisputeResponse) -> Step:
-        session.dispute_id = response.dispute_id
+        case = self._case(session)
+        if case.dispute is None:
+            return Step([self._status(session)])
+        session.dispute_id = case.dispute.dispute_id
         session.stage = Stage.AWAITING_APPROVAL
-        payer = self._payer(self._case(session))
+        return Step([self._package_text(case.dispute, self._payer(case))])
+
+    @staticmethod
+    def _package_text(dispute: Dispute, payer: str) -> str:
         items = "\n".join(
             f"{i}. Line {item.line_number}: {item.summary} ({money(item.amount_cents)})"
-            for i, item in enumerate(response.items, 1)
+            for i, item in enumerate(dispute.items, 1)
         )
-        sources = sorted({ref.title for item in response.items for ref in item.policy_refs})
+        sources = sorted({c.title for item in dispute.items for c in item.policy_citations})
         references = f"\n\nPolicy references: {'; '.join(sources)}." if sources else ""
-        return Step(
-            [
-                f"**Your dispute package is ready**: {len(response.items)} item(s), "
-                f"{money(response.total_disputed_cents)}.\n{items}{references}\n\n"
-                f"{authorization_prompt(payer, response.total_disputed_cents)}\n\n"
-                "Reply **APPROVE** or **REJECT**."
-            ]
+        return (
+            f"**Your dispute package is ready**: {len(dispute.items)} item(s), "
+            f"{money(dispute.total_disputed_cents)}.\n{items}{references}\n\n"
+            f"{authorization_prompt(payer, dispute.total_disputed_cents)}\n\n"
+            "Reply **APPROVE** or **REJECT**."
         )
 
     def _approval(self, session: ChatSession, intent: Intent, text: str) -> Step:
@@ -501,13 +539,18 @@ class ChatOrchestrator:
             )
             session.stage = Stage.DONE
             return Step(["Understood. The dispute was not sent."], end_session=True)
-        if intent.answer == "YES":
-            return Step(
-                ["To authorize the dispute and the call, please reply **APPROVE** (or REJECT)."]
-            )
-        return Step(["Reply APPROVE or REJECT."])
+        return Step(
+            [
+                "To authorize the dispute and the call, reply exactly **APPROVE**. "
+                "Reply **REJECT** to stop."
+            ]
+        )
 
     # ------------------------------------------------------------------ stages: call
+
+    def _calling(self, session: ChatSession, intent: Intent, text: str) -> Step:
+        """Live calls run in the background: any message re-checks Core."""
+        return self._report(session)
 
     def _call_update(self, session: ChatSession, response: DisputeResponse) -> Step:
         session.call_id = response.call_id
@@ -532,7 +575,9 @@ class ChatOrchestrator:
 
     def _handoff(self, session: ChatSession, intent: Intent, text: str) -> Step:
         if intent.kind not in (IntentKind.DONE, IntentKind.CANCEL):
-            return Step(["Reply DONE once you've verified with the representative, or CANCEL."])
+            return Step(
+                ["Reply exactly DONE once you've verified with the representative, or CANCEL."]
+            )
         choice = HandoffChoice.DONE if intent.kind == IntentKind.DONE else HandoffChoice.CANCEL
         self.tools.resolve_human_intervention(
             ResolveHumanInterventionRequest(
@@ -546,27 +591,39 @@ class ChatOrchestrator:
         session.handoff_id = None
         return self._report(session)
 
-    def _report(self, session: ChatSession) -> Step:
-        case = self._case(session)
+    def _report(self, session: ChatSession, case: CaseDetail | None = None) -> Step:
+        """Describe the call/outcome from Core's current state."""
+        case = case or self._case(session)
         calls = self._open(case, call=True)
         if case.state == CaseState.HUMAN_REQUIRED and calls:
             return self._ask_handoff(session, calls[0].intervention_id, calls[0].prompt)
         if case.state in (CaseState.CALL_IN_PROGRESS, CaseState.APPROVED):
             session.stage = Stage.CALLING
-            return Step(["The call is in progress. I'll update you here."])
+            return Step(["The call is in progress. Send any message for an update."])
+        if case.state not in (CaseState.RESOLVED, CaseState.REJECTED, CaseState.FAILED):
+            return Step([self._status(session)])
         session.stage = Stage.DONE
         call = case.calls[-1] if case.calls else None
-        if case.state != CaseState.RESOLVED or call is None or call.insurer_response is None:
-            reason = call.end_reason if call else "no call"
-            return Step([f"The call ended without a resolution ({reason})."], end_session=True)
+        if case.state == CaseState.REJECTED:
+            return Step(["This dispute was rejected, so nothing was sent."], end_session=True)
+        if case.state == CaseState.FAILED:
+            reason = call.end_reason if call else "see STATUS"
+            return Step([f"The case ended without a resolution ({reason})."], end_session=True)
+        if call is None or call.insurer_response is None:
+            outcome = (
+                "Your dispute letter is approved; no call was authorized."
+                if case.dispute
+                else "Based on your answers there is nothing to dispute on this bill."
+            )
+            return Step([outcome], end_session=True)
         response = call.insurer_response
-        amounts = {line.line_id: line for line in (case.claim.lines if case.claim else [])}
+        lines = {line.line_id: line for line in (case.claim.lines if case.claim else [])}
 
         def describe(ids: list[str]) -> str:
             return " and ".join(
-                f"{money(amounts[i].billed_cents)} ({amounts[i].description})"
+                f"{money(lines[i].billed_cents)} ({lines[i].description})"
                 for i in ids
-                if i in amounts
+                if i in lines
             )
 
         parts = [f"**Resolved with {self._payer(case)}.**"]
@@ -606,4 +663,6 @@ class ChatOrchestrator:
         return Step([f"{self._status(session)} Reply RESTART to review another bill."])
 
     def _after_error(self, session: ChatSession, intent: Intent, text: str) -> Step:
+        if session.case_id and not session.pending:
+            return self._resume(session, self._case(session), Step())
         return Step([f"{self._status(session)} Reply RESTART to start over."])

@@ -28,6 +28,7 @@ stateDiagram-v2
     AWAITING_APPROVAL --> APPROVED: patient approves
     AWAITING_APPROVAL --> REJECTED: patient rejects
     APPROVED --> CALL_IN_PROGRESS: start_insurance_call
+    APPROVED --> RESOLVED: approved letter only (no call authorized)
     CALL_IN_PROGRESS --> HUMAN_REQUIRED: sensitive request / handoff
     HUMAN_REQUIRED --> CALL_IN_PROGRESS: intervention resolved
     CALL_IN_PROGRESS --> RESOLVED: insurer response recorded
@@ -60,6 +61,7 @@ stateDiagram-v2
 | AWAITING_APPROVAL | APPROVED | dispute status `approved` (set only by a patient decision) |
 | AWAITING_APPROVAL | REJECTED | dispute status `rejected` |
 | APPROVED | CALL_IN_PROGRESS | dispute `approved` **and** `patient_authorization_id` present |
+| APPROVED | RESOLVED | dispute `approved` **without** a `patient_authorization_id` (letter-only approval: the patient sends the letter themselves; no call is ever placed) |
 | CALL_IN_PROGRESS | HUMAN_REQUIRED | ≥ 1 open call-linked human intervention |
 | HUMAN_REQUIRED | CALL_IN_PROGRESS | 0 open call-linked interventions **and** approval + authorization still present |
 | CALL_IN_PROGRESS / HUMAN_REQUIRED | RESOLVED | an insurer response is recorded |
@@ -78,7 +80,16 @@ Terminal states: `RESOLVED`, `REJECTED`, `FAILED` (no outgoing transitions).
 | → ANALYZED → AWAITING_PATIENT_INPUT | `POST /claims/{id}/analyze` or tool `record_findings` |
 | → FINDINGS_CONFIRMED | last confirmation answered (`POST /human-intervention/{id}/resolve`, signed `POST /relay/webhook`, or tool `resolve_human_intervention`) |
 | → DISPUTE_PREPARED → AWAITING_APPROVAL | `POST /disputes` or tool `record_dispute` |
-| → APPROVED / REJECTED | `POST /disputes/{id}/approve` · `/reject`, or tool `record_patient_decision` |
+| → APPROVED / REJECTED | `POST /disputes/{id}/approve` · `/reject`, or tool `record_patient_decision` (approving with `authorize_call=false` continues straight to RESOLVED) |
 | → CALL_IN_PROGRESS | `POST /voice/start` or tool `start_insurance_call` |
 | → HUMAN_REQUIRED | security policy hit on an insurer utterance, tool `request_human` with a `call_id`, or `POST /voice/{call_id}/human-handoff` |
 | → RESOLVED | tool `record_insurer_response` then the call ends |
+| → FAILED | the call ends without an insurer response (dial / voice-session failure, lost session on resume, patient cancels) |
+
+## Concurrency
+
+Each case row carries a `version` column (SQLAlchemy `version_id_col`). Two writers
+that both read version *n* cannot both commit: the second gets `StaleDataError`, which
+Core returns as HTTP 409 `concurrent_update` ("retry"). This is what stops a double
+tap from starting two insurer calls or advancing the same state twice. Visits, claims
+and disputes are additionally unique per case at the database level.

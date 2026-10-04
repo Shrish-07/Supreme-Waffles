@@ -23,6 +23,7 @@ Legend: ☐ = still to verify · ☑ = verified while building the scaffold (how
 | ☐ | Separate-process mode: mailbox agents resolving each other without explicit endpoints | `fetch/agents/run_all.py:18`, `README_AGENTVERSE.md:64` |
 | ☐ | Whether ASI:One sends `StartSessionContent` / expects `EndSessionContent` (we end the session on terminal replies) | `fetch/agents/orchestrator.py` |
 | ☐ | Real FinchNode patient-id format for chat parsing (assumed `fn_pat_…`) | `fetch/agents/intent.py:10` |
+| ☐ | Whether `AGENTVERSE_API_KEY` is needed at all (mailbox is connected via the inspector; not read by code) | `.env.example` |
 
 ## FinchNode (Member 4)
 

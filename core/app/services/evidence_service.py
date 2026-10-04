@@ -12,7 +12,7 @@ from ..audit import record_audit
 from ..errors import Conflict, ConsentRequired, InvalidInput, NotFound
 from ..mappers import dump_all
 from ..models_db import ConsentRow, EvidenceRow, TranscriptRow, VisitRow
-from .case_service import get_case_row, transition
+from .case_service import get_case_row, has_consent, transition
 
 
 def get_visit_row(db: Session, visit_id: str) -> VisitRow:
@@ -39,6 +39,7 @@ def create_visit(db: Session, *, body: VisitCreate, actor: str) -> VisitRow:
         or consent.case_id != case.id
         or consent.consent_type != ConsentType.RECORDING.value
         or not consent.granted
+        or not has_consent(db, case.id, ConsentType.RECORDING)  # revoked since?
     ):
         raise ConsentRequired(
             "A granted 'recording' consent for this case is required before recording a visit.",

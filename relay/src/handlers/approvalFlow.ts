@@ -17,8 +17,8 @@ const TERMINAL = new Set(["RESOLVED", "REJECTED", "FAILED"]);
 const MAX_ADVANCE_STEPS = 6;
 
 export async function reviewBill(ctx: HandlerContext, convo: Conversation): Promise<void> {
-  convo.stage = "awaiting_claim_id";
   await say(ctx, convo, "Which bill? Send the claim number printed on it (e.g. CLM-2026-0915-001).");
+  convo.stage = "awaiting_claim_id";
 }
 
 export async function captureClaimId(
@@ -31,15 +31,19 @@ export async function captureClaimId(
     await say(ctx, convo, "I couldn't find a claim number. It looks like CLM-2026-0915-001.");
     return;
   }
-  const claim = await ctx.core.ingestClaim({
-    case_id: requireCase(convo),
-    source: "finchnode",
-    finchnode_claim_id: match[0].toUpperCase(),
-  });
-  convo.claimId = claim.claim_id;
-  convo.stage = "in_review";
+  if (!convo.claimId) {
+    const claim = await ctx.core.ingestClaim({
+      case_id: requireCase(convo),
+      source: "finchnode",
+      finchnode_claim_id: match[0].toUpperCase(),
+    });
+    convo.claimId = claim.claim_id;
+    ctx.store.save(); // a platform retry after a later failure must not re-ingest
+  }
   await say(ctx, convo, copy.reviewing);
-  await ctx.core.analyzeClaim(claim.claim_id);
+  // Idempotent in Core. With live agents it answers "pending" and Core notifies us later.
+  await ctx.core.analyzeClaim(convo.claimId);
+  convo.stage = "in_review"; // only after Core accepted the work, so a retry re-runs this step
   await syncAndAdvance(ctx, convo);
 }
 
@@ -85,7 +89,10 @@ export async function answerOpenPrompt(
     .filter(([, n]) => ["confirmation_question", "approval_request", "human_handoff"].includes(n.kind))
     .at(-1);
   if (!open || !choice) {
-    await say(ctx, convo, copy.notUnderstood);
+    // Nothing to answer yet: show anything Core queued (e.g. after a failed send) first.
+    const shown = Object.keys(convo.delivered).length;
+    await syncAndAdvance(ctx, convo);
+    if (Object.keys(convo.delivered).length === shown) await say(ctx, convo, copy.notUnderstood);
     return;
   }
   await replyToNotification(ctx, convo, `ntf:${open[0]}:${choice}`, eventId);
@@ -98,7 +105,10 @@ export async function syncAndAdvance(ctx: HandlerContext, convo: Conversation): 
     await deliverPending(ctx, convo);
     const detail = await ctx.core.getCase(caseId);
     if (detail.state === "FINDINGS_CONFIRMED" && !detail.dispute) {
-      await ctx.core.prepareDispute(caseId);
+      // "pending" = live agents are drafting; Core notifies us when the package is ready.
+      // A later sync re-asks, which Core and the agents treat as a no-op once it exists.
+      const preparation = await ctx.core.prepareDispute(caseId);
+      if (preparation.status === "pending") return;
       continue;
     }
     if (

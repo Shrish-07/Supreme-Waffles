@@ -60,16 +60,21 @@ def record_dispute(
     if claim is None or claim.id != claim_id:
         raise InvalidInput("claim_id does not match the case's claim")
     disputable = {
-        f.id
+        f.id: f
         for f in db.scalars(
             select(FindingRow).where(
                 FindingRow.case_id == case_id, FindingRow.status.in_(DISPUTABLE)
             )
         )
     }
-    unknown = [item.finding_id for item in items if item.finding_id not in disputable]
-    if unknown:
-        raise InvalidInput("Dispute items must reference confirmed findings", finding_ids=unknown)
+    if len({item.finding_id for item in items}) != len(items):
+        raise InvalidInput("Each finding can appear in the dispute only once")
+    for item in items:
+        finding = disputable.get(item.finding_id)
+        if finding is None:
+            raise InvalidInput("Dispute items must reference confirmed findings of this case")
+        if item.claim_line_id != finding.claim_line_id or item.amount_cents != finding.amount_cents:
+            raise InvalidInput("Dispute items must match their finding's claim line and amount")
     if total_disputed_cents != sum(item.amount_cents for item in items):
         raise InvalidInput("total_disputed_cents must equal the sum of item amounts")
 
@@ -143,13 +148,21 @@ def approve(
         details={"authorize_call": authorize_call, "channel": channel.value},
     )
     payer = case.payer_name or "your insurer"
+    if not authorize_call:
+        # Letter only: nothing else for ClaimShield to do, so close the case.
+        transition(db, case, CaseState.RESOLVED, actor=actor, reason="approved without a call")
+        notification_service.notify_status(
+            db,
+            container,
+            case,
+            f"Approved. Your dispute letter for {payer} is ready; no call was authorized.",
+            final=True,
+        )
+        return dispute
     total = format_cents(dispute.total_disputed_cents)
-    message = (
-        f"Approved. ClaimShield will call {payer} about {total}."
-        if authorize_call
-        else "Approved. You can download the dispute letter; no call was authorized."
+    notification_service.notify_status(
+        db, container, case, f"Approved. ClaimShield will call {payer} about {total}."
     )
-    notification_service.notify_status(db, container, case, message)
     return dispute
 
 

@@ -7,21 +7,31 @@
 import type { PatientNotification } from "../coreClient";
 import type { Conversation } from "../store";
 import { renderNotification } from "../ux/messages";
-import { type HandlerContext, requireCase } from "./context";
+import { type HandlerContext, requireCase, serialize } from "./context";
+
+/** Notifications being sent right now (push and pull can race for the same one). */
+const inFlight = new Set<string>();
 
 export async function deliverNotification(
   ctx: HandlerContext,
   convo: Conversation,
   notification: PatientNotification,
 ): Promise<string | undefined> {
-  if (convo.delivered[notification.notification_id]) return undefined;
-  convo.delivered[notification.notification_id] = {
-    kind: notification.kind,
-    interventionId: notification.intervention_id,
-    disputeId: notification.dispute_id,
-  };
-  const sent = await ctx.relay.sendMessage(convo.userId, renderNotification(notification));
-  return sent.id;
+  const id = notification.notification_id;
+  if (convo.delivered[id] || inFlight.has(id)) return undefined;
+  inFlight.add(id);
+  try {
+    const sent = await ctx.relay.sendMessage(convo.userId, renderNotification(notification));
+    // Recorded only after a successful send, so a failed send is retried by the next pull.
+    convo.delivered[id] = {
+      kind: notification.kind,
+      interventionId: notification.intervention_id,
+      disputeId: notification.dispute_id,
+    };
+    return sent.id;
+  } finally {
+    inFlight.delete(id);
+  }
 }
 
 /** Pull Core's outbox for this case and show anything not shown yet. */
@@ -46,7 +56,9 @@ export async function onCoreNotify(
     ctx.log(`no Relay conversation for case ${payload.notification.case_id}; skipping`);
     return { delivered: false };
   }
-  const ref = await deliverNotification(ctx, convo, payload.notification);
-  ctx.store.save();
-  return { delivered: true, delivery_ref: ref };
+  return serialize(convo.userId, async () => {
+    const ref = await deliverNotification(ctx, convo, payload.notification);
+    ctx.store.save();
+    return { delivered: true, delivery_ref: ref };
+  });
 }

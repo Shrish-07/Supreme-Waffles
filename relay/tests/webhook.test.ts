@@ -69,7 +69,7 @@ describe("EventLedger", () => {
     expect(ledger.claim("evt_1")).toBe(false);
     expect(new EventLedger(path).claim("evt_1")).toBe(false);
     ledger.release("evt_1");
-    expect(ledger.claim("evt_1")).toBe(true);
+    expect(new EventLedger(path).claim("evt_1")).toBe(true); // the release was persisted
   });
 
   it("expires old ids", () => {

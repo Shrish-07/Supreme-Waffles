@@ -26,7 +26,12 @@ from uagents_core.contrib.protocols.chat import (  # noqa: E402
     TextContent,
     chat_protocol_spec,
 )
+from uagents_core.identity import Identity  # noqa: E402
 
+from claimshield_contracts.agent_messages import (  # noqa: E402
+    VisitEvidenceRequest,
+    VisitEvidenceResponse,
+)
 from fetch.agents.local_direct import DEMO_CONVERSATION  # noqa: E402
 from fetch.agents.orchestrator import HELLO_REPLY, build_orchestrator  # noqa: E402
 from fetch.agents.run_all import build_bureau  # noqa: E402
@@ -35,6 +40,7 @@ from fetch.agents.settings import (  # noqa: E402
     MissingSeedError,
     require_seed,
 )
+from fetch.agents.visit_agent import build_visit_agent  # noqa: E402
 
 from .conftest import SEEDS, agent_settings, free_port  # noqa: E402
 
@@ -58,6 +64,40 @@ def _chat(text: str) -> ChatMessage:
     )
 
 
+def _run_bureau(
+    build: Callable[[], list[Agent]], done: Callable[[], bool], timeout_s: float
+) -> None:
+    """Run a Bureau in its own thread + event loop (like ``bureau.run()``) until ``done()``.
+    The Bureau cancels every task on its loop at shutdown, so it must not share a loop
+    with the test; agents are built inside that loop."""
+    handles: dict[str, Any] = {}
+    ready = threading.Event()
+
+    def run() -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        bureau = Bureau(
+            agents=build(),
+            port=free_port(),
+            agentverse=OFFLINE_AGENTVERSE,
+            shutdown_timeout=5,
+            loop=loop,
+        )
+        handles["loop"], handles["task"] = loop, loop.create_task(bureau.run_async())
+        ready.set()
+        with contextlib.suppress(BaseException):
+            loop.run_until_complete(handles["task"])
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    assert ready.wait(30), "bureau did not start"
+    deadline = time.time() + timeout_s
+    while not done() and time.time() < deadline:
+        time.sleep(0.2)
+    handles["loop"].call_soon_threadsafe(handles["task"].cancel)
+    thread.join(timeout=20)
+
+
 def _converse(
     build: Callable[[], tuple[list[Agent], str]],
     script: list[str],
@@ -65,17 +105,11 @@ def _converse(
     finished: Callable[[str], bool],
     timeout_s: float = 60.0,
 ) -> dict[str, Any]:
-    """Run a Bureau (own thread + event loop, like ``bureau.run()``) with a patient agent
-    that sends the next scripted line after each prompt. The Bureau cancels every task
-    on its loop at shutdown, so it must not share a loop with the test."""
+    """A patient agent sends the next scripted line after each orchestrator prompt."""
     state: dict[str, Any] = {"next": 1, "replies": [], "acks": 0, "done": False}
-    handles: dict[str, Any] = {}
-    ready = threading.Event()
 
-    def run_bureau() -> None:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        agents, orchestrator_address = build()
+    def agents() -> list[Agent]:
+        built, orchestrator_address = build()
         patient = Agent(
             name="test-patient",
             seed="claimshield-test-patient-seed-0001",
@@ -105,26 +139,9 @@ def _converse(
             await asyncio.sleep(0.5)
             await ctx.send(orchestrator_address, _chat(script[0]))
 
-        bureau = Bureau(
-            agents=[*agents, patient],
-            port=free_port(),
-            agentverse=OFFLINE_AGENTVERSE,
-            shutdown_timeout=5,
-            loop=loop,
-        )
-        handles["loop"], handles["task"] = loop, loop.create_task(bureau.run_async())
-        ready.set()
-        with contextlib.suppress(BaseException):
-            loop.run_until_complete(handles["task"])
+        return [*built, patient]
 
-    thread = threading.Thread(target=run_bureau, daemon=True)
-    thread.start()
-    assert ready.wait(30), "bureau did not start"
-    deadline = time.time() + timeout_s
-    while not state["done"] and time.time() < deadline:
-        time.sleep(0.2)
-    handles["loop"].call_soon_threadsafe(handles["task"].cancel)
-    thread.join(timeout=20)
+    _run_bureau(agents, lambda: state["done"], timeout_s)
     return state
 
 
@@ -171,6 +188,63 @@ def test_full_workflow_over_uagents(agent_env: None, live_core: dict[str, Any]) 
         "claim_agent",
         "dispute_agent",
     }
+
+
+def test_specialists_answer_only_the_orchestrator(
+    agent_env: None, live_core: dict[str, Any]
+) -> None:
+    """Case data is PHI: a specialist ignores any sender but the orchestrator's address."""
+    settings = agent_settings(core_base_url=live_core["base_url"])
+    orchestrator_address = Identity.from_seed(SEEDS["ORCHESTRATOR_SEED"], 0).address
+    answered: dict[str, list[str]] = {"orchestrator": [], "stranger": []}
+    first_answer: list[float] = []
+
+    def agents() -> list[Agent]:
+        visit = build_visit_agent(
+            settings,
+            mailbox=False,
+            agentverse=OFFLINE_AGENTVERSE,
+            orchestrator_address=orchestrator_address,
+        )
+        callers = {
+            "orchestrator": Agent(  # same seed, so same address as the real orchestrator
+                name="orchestrator-stand-in",
+                seed=SEEDS["ORCHESTRATOR_SEED"],
+                agentverse=OFFLINE_AGENTVERSE,
+            ),
+            "stranger": Agent(
+                name="stranger",
+                seed="claimshield-test-stranger-seed-0001",
+                agentverse=OFFLINE_AGENTVERSE,
+            ),
+        }
+        for label, caller in callers.items():
+            _ask_visit_agent(caller, label, visit.address, live_core["case_id"], answered)
+        first_answer.append(0.0)
+        return [visit, *callers.values()]
+
+    def done() -> bool:
+        if answered["orchestrator"] and first_answer[0] == 0.0:
+            first_answer[0] = time.time()
+        return bool(first_answer and first_answer[0]) and time.time() - first_answer[0] > 1.5
+
+    _run_bureau(agents, done, timeout_s=30)
+    assert answered == {"orchestrator": ["req_orchestrator"], "stranger": []}
+
+
+def _ask_visit_agent(
+    caller: Agent, label: str, visit_address: str, case_id: str, answered: dict[str, list[str]]
+) -> None:
+    @caller.on_message(VisitEvidenceResponse)
+    async def on_response(ctx: Context, sender: str, msg: VisitEvidenceResponse) -> None:
+        answered[label].append(msg.request_id)
+
+    @caller.on_event("startup")
+    async def ask(ctx: Context) -> None:
+        await asyncio.sleep(0.5)
+        await ctx.send(
+            visit_address, VisitEvidenceRequest(request_id=f"req_{label}", case_id=case_id)
+        )
 
 
 def test_print_addresses_never_prints_seeds(

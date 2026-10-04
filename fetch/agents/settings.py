@@ -51,6 +51,7 @@ class AgentSettings:
     visit_agent_address: str | None
     claim_agent_address: str | None
     dispute_agent_address: str | None
+    orchestrator_address: str | None
     orchestrator_handle: str | None
 
     @classmethod
@@ -74,5 +75,6 @@ class AgentSettings:
             visit_agent_address=_env("VISIT_AGENT_ADDRESS") or None,
             claim_agent_address=_env("CLAIM_AGENT_ADDRESS") or None,
             dispute_agent_address=_env("DISPUTE_AGENT_ADDRESS") or None,
+            orchestrator_address=_env("ORCHESTRATOR_ADDRESS") or None,
             orchestrator_handle=_env("ORCHESTRATOR_HANDLE") or None,
         )

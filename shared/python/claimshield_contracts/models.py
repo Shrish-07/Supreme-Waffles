@@ -86,12 +86,14 @@ class CodeCandidate(ContractModel):
 class PatientRef(ContractModel):
     """Minimal patient reference. Demographics are enriched from FinchNode after consent."""
 
-    finchnode_patient_id: str
-    display_name: str | None = None
-    member_ref: str | None = None
-    payer_name: str | None = None
-    payer_phone: str | None = None
-    state: str | None = Field(default=None, description="Two-letter US state for policy filtering.")
+    finchnode_patient_id: str = Field(min_length=1, max_length=80)
+    display_name: str | None = Field(default=None, max_length=200)
+    member_ref: str | None = Field(default=None, max_length=80)
+    payer_name: str | None = Field(default=None, max_length=200)
+    payer_phone: str | None = Field(default=None, max_length=32)
+    state: str | None = Field(
+        default=None, min_length=2, max_length=2, description="Two-letter US state."
+    )
 
 
 class Consent(ContractModel):

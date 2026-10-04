@@ -33,10 +33,15 @@ class CaseRow(Base):
     patient_state: Mapped[str | None] = mapped_column(String(2))
     external_ref: Mapped[str | None] = mapped_column(String(120))
     failure_reason: Mapped[str | None] = mapped_column(Text)
+    # Optimistic locking: every UPDATE checks the version it read, so two concurrent
+    # requests can never both apply a transition (e.g. two insurer calls).
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+
+    __mapper_args__ = {"version_id_col": version}
 
 
 class ConsentRow(Base):
@@ -56,7 +61,7 @@ class VisitRow(Base):
     __tablename__ = "visits"
 
     id: Mapped[str] = mapped_column(ID, primary_key=True)
-    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True, unique=True)
     provider_name: Mapped[str | None] = mapped_column(String(200))
     facility_name: Mapped[str | None] = mapped_column(String(200))
     occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -102,7 +107,7 @@ class ClaimRow(Base):
     __tablename__ = "claims"
 
     id: Mapped[str] = mapped_column(ID, primary_key=True)
-    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True, unique=True)
     external_claim_id: Mapped[str] = mapped_column(String(80), index=True)
     payer_name: Mapped[str | None] = mapped_column(String(200))
     provider_name: Mapped[str | None] = mapped_column(String(200))
@@ -176,7 +181,7 @@ class DisputeRow(Base):
     __tablename__ = "disputes"
 
     id: Mapped[str] = mapped_column(ID, primary_key=True)
-    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True, unique=True)
     claim_id: Mapped[str] = mapped_column(ForeignKey("claims.id"))
     status: Mapped[str] = mapped_column(String(32))
     items: Mapped[list[dict[str, Any]]] = mapped_column(JSON)

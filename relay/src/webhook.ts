@@ -99,15 +99,19 @@ export class EventLedger {
     for (const [key, at] of this.seenAt) if (now - at > this.ttlMs) this.seenAt.delete(key);
     if (this.seenAt.has(id)) return false;
     this.seenAt.set(id, now);
-    if (this.path) {
-      mkdirSync(dirname(this.path), { recursive: true });
-      writeFileSync(this.path, JSON.stringify(Object.fromEntries(this.seenAt)));
-    }
+    this.persist();
     return true;
   }
 
   /** Forget an id so the platform's retry is processed (used when handling failed). */
   release(id: string): void {
     this.seenAt.delete(id);
+    this.persist();
+  }
+
+  private persist(): void {
+    if (!this.path) return;
+    mkdirSync(dirname(this.path), { recursive: true });
+    writeFileSync(this.path, JSON.stringify(Object.fromEntries(this.seenAt)));
   }
 }

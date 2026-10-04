@@ -1,5 +1,6 @@
 """Case lifecycle: creation, lookup, consents, guarded transitions, read models."""
 
+import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import exists, func, select
@@ -21,7 +22,7 @@ from claimshield_contracts.models import CaseDetail, PatientRef, TimelineEvent
 from .. import mappers
 from ..audit import record_audit
 from ..db import as_utc
-from ..errors import ConsentRequired, NotFound
+from ..errors import ConsentRequired, DomainError, NotFound
 from ..models_db import (
     AgentRunRow,
     AuditRow,
@@ -41,11 +42,13 @@ from ..models_db import (
     VisitRow,
 )
 from ..state_machine import TERMINAL_STATES, GuardContext, check_transition
+from .security_policy import reject_sensitive_notes
 
 if TYPE_CHECKING:
     from ..container import Container
 
 DISPUTABLE = (FindingStatus.CONFIRMED.value, FindingStatus.NEEDS_CLARIFICATION.value)
+log = logging.getLogger("claimshield.cases")
 
 
 # --------------------------------------------------------------------------- creation / lookup
@@ -87,17 +90,16 @@ def get_case_row(db: Session, case_id: str) -> CaseRow:
     return case
 
 
-def find_open_case(db: Session, finchnode_patient_id: str) -> CaseRow | None:
-    """Most recent non-terminal case for a patient."""
+def open_cases(db: Session, finchnode_patient_id: str) -> list[CaseRow]:
+    """Non-terminal cases for a patient, newest first."""
     terminal = [s.value for s in TERMINAL_STATES]
     stmt = (
         select(CaseRow)
         .where(CaseRow.finchnode_patient_id == finchnode_patient_id)
         .where(CaseRow.state.not_in(terminal))
         .order_by(CaseRow.created_at.desc())
-        .limit(1)
     )
-    return db.scalars(stmt).first()
+    return list(db.scalars(stmt))
 
 
 def find_or_create_case(
@@ -108,9 +110,28 @@ def find_or_create_case(
     external_ref: str | None,
     actor: str,
 ) -> tuple[CaseRow, bool]:
-    existing = find_open_case(db, finchnode_patient_id)
-    if existing is not None:
-        return existing, False
+    """Reuse an open case for THIS claim, else create one (decision D18).
+
+    With a claim number, a case matches if it is tagged with it or already holds that
+    claim; otherwise an open case with no claim yet (e.g. a recorded visit waiting for
+    its bill) is adopted. A case holding a different claim is never reused.
+    """
+    candidates = open_cases(db, finchnode_patient_id)
+    claims = {
+        row.case_id: row.external_claim_id
+        for row in db.scalars(
+            select(ClaimRow).where(ClaimRow.case_id.in_([c.id for c in candidates]))
+        )
+    }
+    if external_ref is None and candidates:
+        return candidates[0], False
+    for case in candidates:
+        if external_ref in (case.external_ref, claims.get(case.id)):
+            return case, False
+    for case in candidates:
+        if case.id not in claims and case.external_ref in (None, external_ref):
+            case.external_ref = external_ref
+            return case, False
     patient = PatientRef(finchnode_patient_id=finchnode_patient_id)
     return (
         create_case(db, patient=patient, channel=channel, external_ref=external_ref, actor=actor),
@@ -121,15 +142,22 @@ def find_or_create_case(
 # --------------------------------------------------------------------------- consent
 
 
-def has_consent(db: Session, case_id: str, consent_type: ConsentType) -> bool:
-    stmt = select(
-        exists().where(
-            ConsentRow.case_id == case_id,
-            ConsentRow.consent_type == consent_type.value,
-            ConsentRow.granted.is_(True),
-        )
+def latest_consent(db: Session, case_id: str, consent_type: ConsentType) -> ConsentRow | None:
+    """The patient's most recent decision for this consent type (grants AND revocations)."""
+    stmt = (
+        select(ConsentRow)
+        .where(ConsentRow.case_id == case_id, ConsentRow.consent_type == consent_type.value)
+        # On a timestamp tie the revocation sorts first (fail safe).
+        .order_by(ConsentRow.created_at.desc(), ConsentRow.granted.asc())
+        .limit(1)
     )
-    return bool(db.scalar(stmt))
+    return db.scalars(stmt).first()
+
+
+def has_consent(db: Session, case_id: str, consent_type: ConsentType) -> bool:
+    """True only if the latest decision is a grant (a later revocation wins)."""
+    latest = latest_consent(db, case_id, consent_type)
+    return bool(latest and latest.granted)
 
 
 def require_consent(db: Session, case_id: str, consent_type: ConsentType) -> None:
@@ -153,6 +181,7 @@ def record_consent(
     actor: str,
 ) -> ConsentRow:
     case = get_case_row(db, case_id)
+    reject_sensitive_notes(consent_text)  # chat channels embed the patient's own words
     consent = ConsentRow(
         id=new_id("consent"),
         case_id=case.id,
@@ -179,8 +208,15 @@ def record_consent(
 
 
 def enrich_patient(db: Session, container: "Container", case: CaseRow) -> None:
-    """Fill blank patient fields from FinchNode (only ever called after consent)."""
-    profile = container.finchnode.get_patient_profile(case.finchnode_patient_id)
+    """Fill blank patient fields from FinchNode (only ever called after consent).
+
+    Best effort: a FinchNode outage must not undo the consent being recorded.
+    """
+    try:
+        profile = container.finchnode.get_patient_profile(case.finchnode_patient_id)
+    except DomainError:
+        log.warning("FinchNode enrichment skipped", extra={"fields": {"case_id": case.id}})
+        return
     if profile is None:
         return
     case.patient_display_name = case.patient_display_name or profile.display_name

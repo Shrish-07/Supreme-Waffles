@@ -6,6 +6,7 @@ checks the caller's ``tools:<name>`` scope (defense in depth; the router checks
 too), owns its transaction(s), and writes an audit event.
 """
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
@@ -67,7 +68,7 @@ from .. import mappers
 from ..audit import record_audit
 from ..auth import ServiceIdentity, tool_scope
 from ..db import utcnow
-from ..errors import Forbidden, InvalidInput, NotFound
+from ..errors import DomainError, Forbidden, InvalidInput, NotFound
 from ..models_db import AgentRunRow, ClaimLineRow, ClaimRow, FindingRow, LineAssessmentRow
 from . import (
     case_service,
@@ -82,6 +83,8 @@ from .human_service import HANDOFF_OPTIONS
 if TYPE_CHECKING:
     from ..container import Container
 
+log = logging.getLogger("claimshield.tools")
+
 
 class ToolService:
     def __init__(self, container: "Container", caller: ServiceIdentity) -> None:
@@ -94,21 +97,45 @@ class ToolService:
 
     # ------------------------------------------------------------------ plumbing
 
-    def _authorize(self, tool: ToolName, agent_run: AgentRunRef | None = None) -> None:
+    def _authorize(
+        self, tool: ToolName, agent_run: AgentRunRef | None = None, case_id: str | None = None
+    ) -> None:
+        reason = None
         if not self._caller.has(tool_scope(tool)):
-            raise Forbidden(f"{self._caller.name.value} may not call tool {tool.value}")
-        if agent_run is not None and tool not in AGENT_TOOLS[agent_run.agent]:
-            raise Forbidden(f"{agent_run.agent.value} is not allowed to call {tool.value}")
+            reason = f"{self._caller.name.value} may not call tool {tool.value}"
+        elif agent_run is not None and tool not in AGENT_TOOLS[agent_run.agent]:
+            reason = f"{agent_run.agent.value} is not allowed to call {tool.value}"
+        if reason:
+            self._audit_failure(tool, case_id, "forbidden")
+            raise Forbidden(reason)
+
+    def _audit_failure(self, tool: ToolName, case_id: str | None, code: str) -> None:
+        """Failed and forbidden calls are audited too (own transaction, never raises)."""
+        try:
+            with self._c.session_scope() as db:
+                record_audit(
+                    db,
+                    actor=self._actor,
+                    action=f"tool.{tool.value}.failed",
+                    case_id=case_id,
+                    details={"code": code},
+                )
+        except Exception:  # pragma: no cover - auditing must not mask the real error
+            log.exception("could not audit failed tool call")
 
     @contextmanager
     def _tx(
         self, tool: ToolName, case_id: str | None, agent_run: AgentRunRef | None = None
     ) -> Iterator[Session]:
-        """Authorize, open a transaction, audit on success."""
-        self._authorize(tool, agent_run)
-        with self._c.session_scope() as db:
-            yield db
-            self._audit(db, tool, case_id, agent_run)
+        """Authorize, open a transaction, audit success and failure."""
+        self._authorize(tool, agent_run, case_id)
+        try:
+            with self._c.session_scope() as db:
+                yield db
+                self._audit(db, tool, case_id, agent_run)
+        except DomainError as exc:
+            self._audit_failure(tool, case_id, exc.code)
+            raise
 
     def _audit(
         self, db: Session, tool: ToolName, case_id: str | None, agent_run: AgentRunRef | None
@@ -346,7 +373,7 @@ class ToolService:
     def resolve_human_intervention(
         self, req: ResolveHumanInterventionRequest
     ) -> HumanResolutionResult:
-        self._authorize(ToolName.RESOLVE_HUMAN_INTERVENTION, req.agent_run)
+        self._authorize(ToolName.RESOLVE_HUMAN_INTERVENTION, req.agent_run, req.case_id)
         result = workflows.resolve_intervention(
             self._c,
             intervention_id=req.intervention_id,
@@ -364,7 +391,7 @@ class ToolService:
     # ------------------------------------------------------------------ calls
 
     def request_human(self, req: RequestHumanRequest) -> HumanIntervention:
-        self._authorize(ToolName.REQUEST_HUMAN, req.agent_run)
+        self._authorize(ToolName.REQUEST_HUMAN, req.agent_run, req.case_id)
         intervention = workflows.request_human(
             self._c,
             case_id=req.case_id,
@@ -379,7 +406,7 @@ class ToolService:
         return intervention
 
     def start_insurance_call(self, req: StartInsuranceCallRequest) -> CallSession:
-        self._authorize(ToolName.START_INSURANCE_CALL, req.agent_run)
+        self._authorize(ToolName.START_INSURANCE_CALL, req.agent_run, req.case_id)
         call = self._c.voice_manager.start_call(req.case_id, actor=self._actor)
         with self._c.session_scope() as db:
             self._audit(db, ToolName.START_INSURANCE_CALL, req.case_id, req.agent_run)

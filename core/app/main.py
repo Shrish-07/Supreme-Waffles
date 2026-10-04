@@ -7,6 +7,8 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.exc import StaleDataError
 
 from claimshield_contracts.version import CONTRACTS_VERSION
 
@@ -47,6 +49,19 @@ async def _domain_error_handler(_: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.to_detail()})
 
 
+async def _concurrent_update_handler(_: Request, exc: Exception) -> JSONResponse:
+    log.warning("optimistic lock conflict: %s", type(exc).__name__)
+    detail = {"code": "concurrent_update", "message": "The case changed concurrently; retry."}
+    return JSONResponse(status_code=409, content={"detail": detail})
+
+
+async def _integrity_error_handler(_: Request, exc: Exception) -> JSONResponse:
+    # Never echo the SQL or its parameters (they can contain PHI).
+    log.warning("integrity error: %s", type(exc).__name__)
+    detail = {"code": "conflict", "message": "The request conflicts with existing data."}
+    return JSONResponse(status_code=409, content={"detail": detail})
+
+
 def create_app(settings: Settings | None = None, container: Container | None = None) -> FastAPI:
     """Build the app. Fails fast if a live mode is missing its keys."""
     settings = settings or (container.settings if container else get_settings())
@@ -63,6 +78,8 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     )
     app.state.container = container or build_container(settings)
     app.add_exception_handler(DomainError, _domain_error_handler)
+    app.add_exception_handler(StaleDataError, _concurrent_update_handler)
+    app.add_exception_handler(IntegrityError, _integrity_error_handler)
 
     @app.middleware("http")
     async def _contracts_header(request: Request, call_next):  # type: ignore[no-untyped-def]

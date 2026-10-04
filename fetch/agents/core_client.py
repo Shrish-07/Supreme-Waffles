@@ -8,7 +8,7 @@ reuse a client (tests pass FastAPI's TestClient).
 from typing import Any, TypeVar
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from claimshield_contracts.api import HumanResolutionResult
 from claimshield_contracts.enums import AgentName
@@ -67,7 +67,7 @@ class CoreClient:
         *,
         agent: AgentName,
         http: httpx.Client | None = None,
-        timeout_s: float = 30.0,
+        timeout_s: float = 60.0,
         request_id: str | None = None,
     ) -> None:
         self._http = http or httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout_s)
@@ -85,15 +85,21 @@ class CoreClient:
         if getattr(req, "agent_run", "missing") is None:
             run = AgentRunRef(agent=self._agent, request_id=self._request_id or new_id("request"))
             req = req.model_copy(update={"agent_run": run})
-        response = self._http.post(
-            f"/internal/tools/{tool.value}",
-            json=req.model_dump(mode="json"),
-            headers={"Authorization": f"Bearer {self._token}"},
-        )
+        try:
+            response = self._http.post(
+                f"/internal/tools/{tool.value}",
+                json=req.model_dump(mode="json"),
+                headers={"Authorization": f"Bearer {self._token}"},
+            )
+        except httpx.HTTPError as exc:  # connect errors, timeouts, protocol errors
+            raise CoreToolError(503, "core_unreachable", type(exc).__name__) from exc
         if response.status_code >= 400:
             raise _error(response)
         _, response_model = TOOL_SPECS[tool]
-        return response_model.model_validate(response.json())
+        try:
+            return response_model.model_validate(response.json())
+        except (ValueError, ValidationError) as exc:
+            raise CoreToolError(502, "invalid_core_response", tool.value) from exc
 
     def find_or_create_case(self, req: FindOrCreateCaseRequest) -> FindOrCreateCaseResponse:
         return self._call(ToolName.FIND_OR_CREATE_CASE, req)

@@ -26,6 +26,7 @@ export interface Conversation {
   caseId?: string;
   recordingConsentId?: string;
   visitId?: string;
+  recordingRef?: string;
   claimId?: string;
   reportSent?: boolean;
   /** Core notifications already shown to the patient (rendered exactly once). */

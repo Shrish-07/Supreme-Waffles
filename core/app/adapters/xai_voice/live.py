@@ -142,8 +142,14 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
             if decision.action == TurnAction.PAUSE_FOR_HUMAN:
                 await self._hold(ws, call, decision.say or HOLD_LINE)
         elif event_type == EVT_FUNCTION_ARGS_DONE:
-            result = handler.on_tool_call(
-                call_id, event.get("name", ""), json.loads(event.get("arguments") or "{}")
+            try:
+                arguments = json.loads(event.get("arguments") or "{}")
+            except json.JSONDecodeError:
+                arguments = None
+            result = (
+                handler.on_tool_call(call_id, event.get("name", ""), arguments)
+                if isinstance(arguments, dict)
+                else {"error": "invalid_arguments", "message": "Arguments must be a JSON object."}
             )
             await ws.send(
                 json.dumps(
@@ -184,6 +190,19 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
     async def _hold(self, ws: Any, call: _LiveCall, line: str) -> None:
         call.paused = True
         await self._say(ws, line, interrupt=True)
+        await ws.send(json.dumps(self._auto_response(enabled=False)))
+
+    @staticmethod
+    def _auto_response(*, enabled: bool) -> dict[str, Any]:
+        """Stop/start the server replying on its own while a human is needed.
+
+        VERIFY against current docs: the turn-detection flag that disables automatic
+        responses (OpenAI-compatible APIs use ``turn_detection.create_response``).
+        """
+        return {
+            "type": "session.update",
+            "session": {"turn_detection": {"type": "server_vad", "create_response": enabled}},
+        }
 
     async def _consume_commands(self, ws: Any, call: _LiveCall) -> None:
         assert call.commands is not None
@@ -193,6 +212,7 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
                 await self._hold(ws, call, HOLD_LINE)
             elif command == "resume":
                 call.paused = False
+                await ws.send(json.dumps(self._auto_response(enabled=True)))
                 await ws.send(
                     json.dumps(
                         {

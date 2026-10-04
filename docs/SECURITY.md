@@ -15,7 +15,12 @@
 | The voice model cannot pick which case a tool acts on | `core/app/adapters/xai_voice/dispatcher.py` injects `case_id`/`call_id` | `test_voice_mock.py` |
 | Core never stores the secrets it refuses to say | `human_service.resolve` rejects notes that contain SSN-like values, PINs, passwords (422 `sensitive_data_rejected`) | `test_security_policy.py` |
 | Core only dials allowlisted numbers | `TELEPHONY_ALLOWED_NUMBERS`, checked in `VoiceCallManager.start` for every telephony mode | `test_voice_mock.py` |
-| No health data is read before consent | `case_service.require_consent(..., HEALTH_DATA_ACCESS)` before any FinchNode call; `RECORDING` consent before `POST /visits` | `test_api_flow.py` |
+| No health data is read before consent | `case_service.require_consent(..., HEALTH_DATA_ACCESS)` before any FinchNode call; `RECORDING` consent before `POST /visits` | `test_validation_and_consent.py` |
+| A revoked consent wins | consents are append-only; `case_service.has_consent` uses the **latest** decision per type (a revocation beats an earlier grant, and wins a timestamp tie) | `test_failure_paths.py::test_revoked_consent_blocks_record_access` |
+| Approval is an exact command, never inferred | ASI:One: `fetch/agents/intent.py` accepts APPROVE / REJECT / DONE / CANCEL only as the whole message ("I don't approve" is re-prompted); Relay: approval is a button | `fetch/tests/test_intent_and_session.py`, `test_orchestrator_local_direct.py` |
+| One insurer call per dispute, even under double taps | optimistic locking on `cases.version` (409 `concurrent_update`) + the state machine (a second start is an illegal transition) | `test_failure_paths.py` |
+| A failed call never strands a case | dial / voice-session / resume failures hang up (best effort) and close the call and case as FAILED with a patient notice | `test_failure_paths.py` |
+| Cross-case references are rejected | findings, dispute items, interventions and call ids must belong to the case they are recorded on (422) | `test_failure_paths.py` |
 
 ## 2. Authentication & authorization
 
@@ -36,6 +41,15 @@
 - The orchestrator's REST trigger (Core → Fetch in `FETCH_MODE=agentverse`) carries
   the Fetch service token in the request body, because uAgents REST handlers don't
   expose headers.
+- **Agent-to-agent**: specialists answer only `ORCHESTRATOR_ADDRESS` (they refuse to
+  start with a mailbox and no address), and the orchestrator accepts a specialist
+  reply only from the agent it sent that request to. Within a Bureau the address is
+  derived from `ORCHESTRATOR_SEED` automatically.
+- **Per-agent tool allowlist** (`AGENT_TOOLS`): enforced by Core when a tool call
+  carries `agent_run`. All agents share the Fetch token, so this catches bugs, not a
+  hostile caller; issue per-agent tokens before production.
+- In `RELAY_MODE=mock` the Relay service skips platform signature verification
+  (there is no platform); `live` always verifies.
 
 ## 3. PHI handling (prototype level)
 
@@ -48,6 +62,10 @@
   event is written to `audit_events`.
 - **Data minimization**: the voice agent sees a `DisputeCaseView` with a masked
   member reference and only the dispute's facts.
+- **No SQL parameters in errors or logs**: the engine uses `hide_parameters=True`,
+  and integrity / stale-data errors return a generic 409 without SQL.
+- **Rejections never echo the value**: a choice or note containing an SSN-like value
+  is rejected with 422 without repeating it.
 - Agent seeds are read only from env, never logged, and git-ignored (`*.seed`, `seeds/`).
 
 ## 4. Known limitations (be honest in the demo)
@@ -62,5 +80,8 @@
 3. **No encryption at rest, no key management, no BAA-covered vendors** — required
    before any real PHI.
 4. **ASI:One identity**: chat answers are attributed to the ASI:One sender address;
-   there is no strong patient identity verification in the prototype.
+   there is no strong patient identity verification in the prototype. Anyone who
+   knows a FinchNode patient id and claim number can resume that open case from a
+   new chat (the demo relies on this to resume across chats). Bind ASI:One senders to
+   verified patients before real use.
 5. **Single-process mock call state**: mock call cursors live in Core's memory.

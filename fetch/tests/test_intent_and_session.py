@@ -40,6 +40,27 @@ def test_intents(text: str, kind: IntentKind, answer: str | None) -> None:
     assert intent.kind == kind and intent.answer == answer
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I don't approve",
+        "I did not approve that",
+        "approve the call",
+        "yes, I approve",
+        "not done yet",
+        "please don't cancel",
+        "I'm not finished",
+    ],
+)
+def test_safety_commands_need_the_exact_word(text: str) -> None:
+    assert parse_intent(text).kind == IntentKind.UNKNOWN
+
+
+def test_hedged_answers_are_not_taken_at_face_value() -> None:
+    assert parse_intent("yes, but I'm not sure").answer == "NOT_SURE"
+    assert parse_intent("yes but only once").kind == IntentKind.UNKNOWN
+
+
 def test_ids_are_extracted() -> None:
     intent = parse_intent("Patient fn_pat_demo_001, claim clm-2026-0915-001 please")
     assert intent.patient_id == "fn_pat_demo_001"

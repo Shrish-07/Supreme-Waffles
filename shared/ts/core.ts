@@ -1870,7 +1870,7 @@ export interface components {
             payer_phone?: string | null;
             /**
              * State
-             * @description Two-letter US state for policy filtering.
+             * @description Two-letter US state.
              */
             state?: string | null;
         };

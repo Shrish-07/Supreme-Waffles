@@ -52,12 +52,24 @@ _CHOICE_ALIASES = {
 
 
 def normalize_choice(choice: str, options: list[str]) -> str:
-    """Map free-form button/text replies onto one of ``options``."""
+    """Map free-form button/text replies onto one of ``options``.
+
+    The raw input is never echoed back: patients sometimes type secrets into replies.
+    """
     key = choice.strip().upper().replace("'", "").replace("-", "_").replace(" ", "_")
     key = _CHOICE_ALIASES.get(key, key)
     if key not in options:
-        raise InvalidInput(f"Choice '{choice}' is not one of {options}", options=options)
+        raise InvalidInput(f"Choice must be one of {options}", options=options)
     return key
+
+
+def is_confirmation(row: InterventionRow) -> bool:
+    """A finding question (never call-linked); everything else is a handoff."""
+    return (
+        row.reason == HumanReason.PATIENT_CONFIRMATION.value
+        and row.call_id is None
+        and row.finding_id is not None
+    )
 
 
 def get_intervention_row(db: Session, intervention_id: str) -> InterventionRow:
@@ -165,14 +177,15 @@ def resolve(
     row = get_intervention_row(db, intervention_id)
     if row.status != InterventionStatus.OPEN.value:
         raise Conflict("This intervention is already resolved.", code="already_resolved")
+    reject_sensitive_notes(choice)
     reject_sensitive_notes(notes)
     normalized = normalize_choice(choice, row.options)
-    is_confirmation = row.reason == HumanReason.PATIENT_CONFIRMATION.value
+    confirmation = is_confirmation(row)
     decision = DecisionRow(
         id=new_id("decision"),
         case_id=row.case_id,
         decision_type=(
-            DecisionType.FINDING_ANSWER if is_confirmation else DecisionType.HANDOFF_RESOLUTION
+            DecisionType.FINDING_ANSWER if confirmation else DecisionType.HANDOFF_RESOLUTION
         ).value,
         choice=normalized,
         actor=actor_kind.value,
@@ -194,7 +207,7 @@ def resolve(
         resource_id=row.id,
         details={"reason": row.reason, "choice": normalized, "channel": channel.value},
     )
-    if is_confirmation:
+    if confirmation:
         _apply_answer(db, row, PatientAnswer(normalized))
         _advance_confirmations(db, container, get_case_row(db, row.case_id), actor=actor)
     return row, decision

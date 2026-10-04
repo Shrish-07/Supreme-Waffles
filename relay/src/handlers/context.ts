@@ -29,3 +29,17 @@ export function requireCase(convo: Conversation): string {
   if (!convo.caseId) throw new Error(`conversation ${convo.userId} has no case yet`);
   return convo.caseId;
 }
+
+const queues = new Map<string, Promise<unknown>>();
+
+/** Run handlers for one patient strictly one at a time (double taps, push vs webhook). */
+export function serialize<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const previous = queues.get(key) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(work);
+  const tail = next.catch(() => undefined);
+  queues.set(key, tail);
+  void tail.then(() => {
+    if (queues.get(key) === tail) queues.delete(key);
+  });
+  return next;
+}

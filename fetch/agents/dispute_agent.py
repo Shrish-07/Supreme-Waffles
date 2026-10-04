@@ -26,6 +26,7 @@ def build_dispute_agent(
     tools: CoreClient | None = None,
     mailbox: bool = True,
     agentverse: str | None = None,
+    orchestrator_address: str | None = None,
 ) -> Agent:
     settings = settings or AgentSettings.from_env()
     return build_specialist(
@@ -37,7 +38,11 @@ def build_dispute_agent(
         request_model=DisputeRequest,
         response_model=DisputeResponse,
         handle=handle_dispute_request,
+        on_error=lambda msg, error: DisputeResponse(
+            request_id=msg.request_id, case_id=msg.case_id, ok=False, error=error, action=msg.action
+        ),
         settings=settings,
+        orchestrator_address=orchestrator_address or settings.orchestrator_address,
         tools=tools,
         mailbox=mailbox,
         agentverse=agentverse,

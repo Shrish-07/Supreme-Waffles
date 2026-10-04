@@ -24,6 +24,7 @@ def build_visit_agent(
     tools: CoreClient | None = None,
     mailbox: bool = True,
     agentverse: str | None = None,
+    orchestrator_address: str | None = None,
 ) -> Agent:
     settings = settings or AgentSettings.from_env()
     deps = VisitLogicDeps(
@@ -42,7 +43,11 @@ def build_visit_agent(
         request_model=VisitEvidenceRequest,
         response_model=VisitEvidenceResponse,
         handle=lambda client, msg: handle_visit_evidence_request(client, msg, deps),
+        on_error=lambda msg, error: VisitEvidenceResponse(
+            request_id=msg.request_id, case_id=msg.case_id, ok=False, error=error
+        ),
         settings=settings,
+        orchestrator_address=orchestrator_address or settings.orchestrator_address,
         tools=tools,
         mailbox=mailbox,
         agentverse=agentverse,

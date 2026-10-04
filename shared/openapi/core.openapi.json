@@ -3004,6 +3004,7 @@
           "display_name": {
             "anyOf": [
               {
+                "maxLength": 200,
                 "type": "string"
               },
               {
@@ -3013,12 +3014,15 @@
             "title": "Display Name"
           },
           "finchnode_patient_id": {
+            "maxLength": 80,
+            "minLength": 1,
             "title": "Finchnode Patient Id",
             "type": "string"
           },
           "member_ref": {
             "anyOf": [
               {
+                "maxLength": 80,
                 "type": "string"
               },
               {
@@ -3030,6 +3034,7 @@
           "payer_name": {
             "anyOf": [
               {
+                "maxLength": 200,
                 "type": "string"
               },
               {
@@ -3041,6 +3046,7 @@
           "payer_phone": {
             "anyOf": [
               {
+                "maxLength": 32,
                 "type": "string"
               },
               {
@@ -3052,13 +3058,15 @@
           "state": {
             "anyOf": [
               {
+                "maxLength": 2,
+                "minLength": 2,
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Two-letter US state for policy filtering.",
+            "description": "Two-letter US state.",
             "title": "State"
           }
         },

@@ -11,6 +11,7 @@ Each callback opens its own DB transaction, so the same code serves the
 synchronous mock session and the threaded live session.
 """
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
@@ -57,6 +58,7 @@ from .security_policy import (
     AllowedFacts,
     check_agent_utterance,
     detect_sensitive_request,
+    reject_sensitive_notes,
 )
 
 if TYPE_CHECKING:
@@ -72,6 +74,8 @@ SENSITIVE_PROMPTS = {
     "bank_account": "The representative asked for bank account details.",
 }
 LIVE_CALL_STATUSES = (CallStatus.IN_PROGRESS.value, CallStatus.PAUSED_FOR_HUMAN.value)
+HANDOFF_REASONS = frozenset(HumanReason) - {HumanReason.PATIENT_CONFIRMATION}
+log = logging.getLogger("claimshield.voice")
 
 
 def _get_call(db: Session, call_id: str) -> CallRow:
@@ -102,6 +106,8 @@ def record_insurer_response(
     referenced = set(req.removed_line_ids) | set(req.itemization_requested_line_ids)
     if not referenced <= line_ids:
         raise InvalidInput("Response references claim lines that are not on this claim")
+    for text in (req.notes, req.representative_name, req.reference_number):
+        reject_sensitive_notes(text)
     response = InsurerResponse(
         outcome=req.outcome,
         reference_number=req.reference_number,
@@ -207,7 +213,13 @@ class VoiceCallManager:
             model=self._c.settings.xai_voice_model or None,
             voice=self._c.settings.xai_voice_name or None,
         )
-        self._c.voice.start_session(config, self)
+        try:
+            self._c.voice.start_session(config, self)
+        except Exception as exc:
+            log.exception("voice session failed to start", extra={"fields": {"call_id": call_id}})
+            self._quiet_hangup(dial.provider_call_ref)
+            self._end(call_id, f"voice session failed: {type(exc).__name__}", failed=True)
+            raise UpstreamError("The voice session could not be started.") from exc
         return self.get_call(call_id)
 
     def get_call(self, call_id: str) -> CallSession:
@@ -230,21 +242,42 @@ class VoiceCallManager:
                 call, CallSpeaker.HUMAN, "Member verified directly with the representative."
             )
             transition(db, case, CaseState.CALL_IN_PROGRESS, actor=actor)
-        self._c.voice.resume_session(call_id, self)
+        try:
+            self._c.voice.resume_session(call_id, self)
+        except Exception as exc:
+            log.exception("voice session could not resume", extra={"fields": {"call_id": call_id}})
+            self._end(call_id, f"voice session lost: {type(exc).__name__}", failed=True)
+            raise UpstreamError("The call could not be resumed and was closed.") from exc
 
     def cancel_after_human(self, call_id: str, *, actor: str) -> None:
         """Called after a call-linked intervention resolves with CANCEL."""
         with self._c.session_scope() as db:
             ref = _get_call(db, call_id).provider_call_ref
-        self._c.voice.end_session(call_id, "cancelled by patient")
-        if ref:
-            self._c.telephony.hangup(ref)
-        self.on_call_ended(call_id, "cancelled by patient")
+        try:
+            self._c.voice.end_session(call_id, "cancelled by patient")
+        except Exception:
+            log.exception(
+                "voice session did not end cleanly", extra={"fields": {"call_id": call_id}}
+            )
+        finally:
+            self._quiet_hangup(ref)
+            self.on_call_ended(call_id, "cancelled by patient")
+
+    def _quiet_hangup(self, provider_call_ref: str | None) -> None:
+        """Best-effort hangup; failures are logged, never left to strand a case."""
+        if not provider_call_ref:
+            return
+        try:
+            self._c.telephony.hangup(provider_call_ref)
+        except Exception:
+            log.exception("telephony hangup failed", extra={"fields": {"ref": provider_call_ref}})
 
     def request_handoff(
         self, call_id: str, *, reason: HumanReason, detail: str, actor: str
     ) -> HumanIntervention:
         """Pause an active call for a human (model tool call or explicit API request)."""
+        if reason not in HANDOFF_REASONS:
+            reason = HumanReason.CALL_ESCALATION  # pausing is always the safe default
         with self._c.session_scope() as db:
             call = _get_call(db, call_id)
             if call.status == CallStatus.PAUSED_FOR_HUMAN.value and call.open_intervention_id:

@@ -9,8 +9,8 @@ import { ingestRecording } from "./audioIngest";
 import { type HandlerContext, requireCase, say } from "./context";
 
 export async function offerRecording(ctx: HandlerContext, convo: Conversation): Promise<void> {
-  convo.stage = "awaiting_recording_choice";
   await say(ctx, convo, copy.recordingOffer());
+  convo.stage = "awaiting_recording_choice";
 }
 
 export async function answerRecordingChoice(
@@ -19,20 +19,22 @@ export async function answerRecordingChoice(
   choice: string | undefined,
 ): Promise<void> {
   if (choice === BUTTONS.recordSkip.id || choice === "NO") {
-    convo.stage = "ready_for_bill";
     await say(ctx, convo, copy.readyForBill());
+    convo.stage = "ready_for_bill";
     return;
   }
   if (choice !== BUTTONS.recordYes.id && choice !== "YES") {
     await say(ctx, convo, copy.notUnderstood);
     return;
   }
-  const consent = await ctx.core.recordConsent(requireCase(convo), {
-    consent_type: "recording",
-    consent_text: RECORDING_CONSENT_TEXT,
-    channel: "relay",
-  });
-  convo.recordingConsentId = consent.consent_id;
+  if (!convo.recordingConsentId) {
+    const consent = await ctx.core.recordConsent(requireCase(convo), {
+      consent_type: "recording",
+      consent_text: RECORDING_CONSENT_TEXT,
+      channel: "relay",
+    });
+    convo.recordingConsentId = consent.consent_id;
+  }
   await ctx.relay.startRecording(convo.userId);
   convo.stage = "recording";
   await say(ctx, convo, copy.recordingStarted);
@@ -45,16 +47,21 @@ export async function onRecordingCompleted(
   recordingUrl?: string,
 ): Promise<void> {
   if (!convo.recordingConsentId) throw new Error("recording completed without recording consent");
-  const recordingRef = await ingestRecording(ctx, recordingUrl);
-  const visit = await ctx.core.createVisit({
-    case_id: requireCase(convo),
-    recording_consent_id: convo.recordingConsentId,
-    recording_ref: recordingRef,
-  });
-  convo.visitId = visit.visit_id;
-  const transcript = await ctx.transcriber.transcribe(recordingRef);
-  const result = await ctx.core.completeVisit(visit.visit_id, transcript);
-  convo.stage = "ready_for_bill";
+  if (!convo.visitId) {
+    const recordingRef = await ingestRecording(ctx, recordingUrl);
+    const visit = await ctx.core.createVisit({
+      case_id: requireCase(convo),
+      recording_consent_id: convo.recordingConsentId,
+      recording_ref: recordingRef,
+    });
+    convo.visitId = visit.visit_id;
+    convo.recordingRef = recordingRef;
+    ctx.store.save(); // a retry must not create a second visit
+  }
+  const transcript = await ctx.transcriber.transcribe(convo.recordingRef ?? "");
+  // Core makes this retry-safe: an already-stored transcript just re-runs extraction.
+  const result = await ctx.core.completeVisit(convo.visitId, transcript);
   const noted = result.evidence.filter((e) => !e.negated).map((e) => e.description);
   await say(ctx, convo, copy.transcriptReady(noted));
+  convo.stage = "ready_for_bill";
 }

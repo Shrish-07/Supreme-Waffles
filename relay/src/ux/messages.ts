@@ -65,6 +65,8 @@ export const copy = {
   reviewing: "Reviewing your bill against your records and visit recording...",
   restart: "Send \"restart\" to review another bill.",
   notUnderstood: "Sorry, I didn't catch that. Please use the buttons above.",
+  coreRejected: (code: string) =>
+    `Sorry, I couldn't do that step (${code}). Send "restart" to start over if you're stuck.`,
 };
 
 function withNotificationIds(notificationId: string, buttons: Button[]): Button[] {
