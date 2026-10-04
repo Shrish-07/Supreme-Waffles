@@ -50,7 +50,7 @@ def test_default_settings_are_all_mock_and_valid() -> None:
     ("overrides", "missing"),
     [
         ({"xai_voice_mode": "live"}, "XAI_API_KEY"),
-        ({"telephony_mode": "live"}, "TWILIO_ACCOUNT_SID"),
+        ({"telephony_mode": "live"}, "TELNYX_API_KEY"),
         ({"finchnode_mode": "sandbox"}, "FINCHNODE_API_KEY"),
         ({"finchnode_mode": "demo"}, "FINCHNODE_BASE_URL"),
         ({"notify_mode": "relay_service", "relay_service_url": ""}, "RELAY_SERVICE_URL"),

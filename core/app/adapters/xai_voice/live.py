@@ -6,10 +6,11 @@
 # the endpoint, auth header, model + voice names, and each event name below
 # before the first live call. Listed in docs/VERIFY_LIST.md.
 
-Media: with TELEPHONY_MODE=live the insurer audio is bridged Twilio <-> xAI over
-SIP (telephony/twilio_sip.py); this WebSocket is the control channel (instructions,
-tools, transcripts). Each call runs on its own thread + event loop; every handler
-callback opens its own DB session inside VoiceCallManager.
+Media: with TELEPHONY_MODE=live the insurer audio is bridged insurer <-> Telnyx <->
+xAI over SIP (telephony/telnyx_sip.py + the /voice/telnyx/webhook route); this
+WebSocket is the control channel (instructions, tools, transcripts). Each call
+runs on its own thread + event loop; every handler callback opens its own DB
+session inside VoiceCallManager.
 
 Guardrails here are post-hoc for audio (decision D15): agent transcripts are
 checked when they complete and a violation interrupts the response.
