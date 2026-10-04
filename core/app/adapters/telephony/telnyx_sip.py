@@ -89,7 +89,6 @@ class TelnyxSipTelephony(TelephonyAdapter):
         self._http = http or httpx.Client(timeout=10.0)
         self._http.headers.update({"Authorization": f"Bearer {api_key}"})
 
-
     def _post(self, path: str, body: dict) -> dict:
         try:
             response = self._http.post(f"{TELNYX_API}{path}", json=body)

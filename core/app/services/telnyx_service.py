@@ -47,9 +47,7 @@ def process_telnyx_event(
     signature: str | None,
 ) -> dict[str, bool]:
     """Verify the signature, then dispatch one Telnyx event. Return {"received": ...}."""
-    verify_telnyx_signature(
-        container.settings.telnyx_public_key, raw_body, timestamp, signature
-    )
+    verify_telnyx_signature(container.settings.telnyx_public_key, raw_body, timestamp, signature)
     try:
         event = json.loads(raw_body)
     except ValueError as exc:
@@ -68,9 +66,7 @@ def process_telnyx_event(
     return {"received": handled}
 
 
-def _dispatch(
-    container: "Container", event_type: str, payload: dict, call_id: str | None
-) -> bool:
+def _dispatch(container: "Container", event_type: str, payload: dict, call_id: str | None) -> bool:
     to = str(payload.get("to") or "")
     if to.startswith("sip:"):
         return False  # the xAI leg: manages itself via the control WebSocket

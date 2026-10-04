@@ -30,9 +30,7 @@ def telnyx_keys() -> tuple[SigningKey, str]:
     return signing_key, base64.b64encode(bytes(signing_key.verify_key)).decode()
 
 
-def _sign(
-    signing_key: SigningKey, body: bytes, timestamp: int | None = None
-) -> dict[str, str]:
+def _sign(signing_key: SigningKey, body: bytes, timestamp: int | None = None) -> dict[str, str]:
     at = timestamp if timestamp is not None else int(time.time())
     signature = signing_key.sign(str(at).encode() + body).signature
     return {
@@ -104,6 +102,7 @@ def test_signature_requires_public_key_and_headers() -> None:
     with pytest.raises(TelnyxSignatureError):
         verify_telnyx_signature("a2V5", b"{}", None, None)
 
+
 # ------------------------------------------------------------------ adapter
 
 Handler = Callable[[httpx.Request], httpx.Response]
@@ -170,9 +169,7 @@ def test_transfer_to_sip_targets_xai_and_carries_the_call_id() -> None:
     _adapter(handler).transfer_to_sip("cc_1", "call_123")
     assert captured["path"] == "/v2/calls/cc_1/actions/transfer"
     assert captured["body"]["to"] == "sip:test@sip.x.ai"
-    assert captured["body"]["headers"] == [
-        {"name": "X-ClaimShield-Call-Id", "value": "call_123"}
-    ]
+    assert captured["body"]["headers"] == [{"name": "X-ClaimShield-Call-Id", "value": "call_123"}]
     assert from_client_state(captured["body"]["client_state"]) == "call_123"
 
 
@@ -307,4 +304,3 @@ def test_webhook_hangup_for_an_unknown_call_is_ignored(tmp_path: Path, telnyx_ke
     response = _post_event(app, signing_key, body)
     assert response.status_code == 200
     assert response.json() == {"received": False}
-
