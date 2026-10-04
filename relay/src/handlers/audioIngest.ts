@@ -10,7 +10,7 @@ import { join } from "node:path";
 import type { HandlerContext } from "./context";
 
 export async function ingestRecording(ctx: HandlerContext, recordingUrl?: string): Promise<string> {
-  if (ctx.relay.mode === "mock" || !recordingUrl) {
+  if (ctx.relay.simulatesRecording || !recordingUrl) {
     return `mock://recordings/${randomUUID()}.wav`;
   }
   const audio = await ctx.relay.fetchRecording(recordingUrl);

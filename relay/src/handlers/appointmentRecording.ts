@@ -38,7 +38,7 @@ export async function answerRecordingChoice(
   await ctx.relay.startRecording(convo.userId);
   convo.stage = "recording";
   await say(ctx, convo, copy.recordingStarted);
-  if (ctx.relay.mode === "mock") await onRecordingCompleted(ctx, convo);
+  if (ctx.relay.simulatesRecording) await onRecordingCompleted(ctx, convo);
 }
 
 export async function onRecordingCompleted(

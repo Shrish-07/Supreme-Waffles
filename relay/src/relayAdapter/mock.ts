@@ -8,6 +8,7 @@ export interface SentMessage {
 
 export class MockRelayAdapter implements RelayAdapter {
   readonly mode = "mock" as const;
+  readonly simulatesRecording = true;
   readonly outbox: SentMessage[] = [];
   private counter = 0;
 

@@ -15,12 +15,13 @@ import { ConversationStore } from "./store";
 import { EventLedger, SignatureError, parsePlatformEvent, verifyPlatformSignature } from "./webhook";
 
 export function createContext(config: RelayConfig, overrides: Partial<HandlerContext> = {}): HandlerContext {
+  const relay = config.mode === "live" ? new LiveRelayAdapter(config) : new MockRelayAdapter(true);
   return {
     config,
     core: new CoreClient(config.coreBaseUrl, config.serviceToken, config.coreWebhookSecret),
-    relay: config.mode === "live" ? new LiveRelayAdapter(config) : new MockRelayAdapter(true),
+    relay,
     store: new ConversationStore(join(config.dataDir, "conversations.json")),
-    transcriber: config.mode === "live" ? new LiveTranscriber() : new MockTranscriber(),
+    transcriber: relay.simulatesRecording ? new MockTranscriber() : new LiveTranscriber(),
     log: (message) => console.log(`[relay] ${message}`),
     ...overrides,
   };
@@ -60,6 +61,11 @@ export function createApp(ctx: HandlerContext, ledger = new EventLedger(join(ctx
         } catch (error) {
           // Malformed events would fail the same way on every retry.
           return send(res, 400, { error: `malformed event: ${(error as Error).message}` });
+        }
+        if (event.kind === "ignored") return send(res, 200, { status: "ignored" });
+        if (event.kind === "message" && !event.buttonId && event.text) {
+          const buttonId = ctx.relay.resolveButton?.(event.from, event.text);
+          if (buttonId) event = { ...event, buttonId };
         }
         if (!ledger.claim(event.id)) return send(res, 200, { status: "duplicate" });
         try {
