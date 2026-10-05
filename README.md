@@ -1,10 +1,10 @@
-# ClaimShield
+# Amyna
 
 > **Hackathon prototype — all demo data is synthetic.** ClaimShield is **not
 > HIPAA-compliant and not production-ready**. Do not use real patient data, member IDs,
 > recordings, phone numbers or credentials. See [docs/SECURITY.md](docs/SECURITY.md).
 
-ClaimShield helps patients review healthcare bills. It compares billed claim lines against
+Amyna helps patients review healthcare bills. It compares billed claim lines against
 patient-authorized health records (FinchNode), appointment evidence (a recorded and transcribed
 visit), and billing/code/policy knowledge. It finds discrepancies, asks the patient to confirm
 uncertain items, and prepares evidence-backed disputes. Only after explicit patient approval
