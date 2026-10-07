@@ -45,8 +45,8 @@ def approval_authorization_text(payer_name: str | None, total_cents: int) -> str
     """The exact wording a patient accepts when approving (stored with the decision)."""
     payer = payer_name or "my insurer"
     return (
-        f"I approve this dispute of {format_cents(total_cents)} and authorize ClaimShield to "
-        f"call {payer} on my behalf. ClaimShield will never share my SSN, PINs or passwords "
+        f"I approve this dispute of {format_cents(total_cents)} and authorize Amyna to "
+        f"call {payer} on my behalf. Amyna will never share my SSN, PINs or passwords "
         "and will pause the call for me if they are requested."
     )
 
@@ -134,9 +134,9 @@ def notify_handoff(
 ) -> NotificationRow:
     payer = case.payer_name or "your insurer"
     text = (
-        f"ClaimShield paused your call with {payer}. {intervention.prompt} "
-        "ClaimShield never shares your SSN, PINs or passwords. Please verify directly with "
-        "the representative, then tap Done to let ClaimShield continue."
+        f"Amyna paused your call with {payer}. {intervention.prompt} "
+        "Amyna never shares your SSN, PINs or passwords. Please verify directly with "
+        "the representative, then tap Done to let Amyna continue."
     )
     return notify(
         db,

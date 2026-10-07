@@ -19,7 +19,7 @@ They never touch the database or FinchNode directly.
 ## To implement for LIVE
 
 1. **Discoverability first** (riskiest): `make agents-hello`, connect the mailbox, find the
-   agent in ASI:One, get "Hello from ClaimShield". Follow `agentverse/README_AGENTVERSE.md`.
+   agent in ASI:One, get "Hello from Amyna". Follow `agentverse/README_AGENTVERSE.md`.
 2. Full flow on Agentverse: `FETCH_MODE=agentverse`, `HELLO_WORLD=0`, `make agents`, run the
    demo conversation in ASI:One (`docs/DEMO_SCRIPT.md`). Confirm `StartSessionContent` /
    `EndSessionContent` handling with ASI:One.

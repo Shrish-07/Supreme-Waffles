@@ -1,4 +1,4 @@
-"""ClaimShield Fetch agents (Member 3).
+"""Amyna Fetch agents (Member 3).
 
 - logic/      pure functions (no uagents import) -- the actual agent behavior
 - *_agent.py  thin uAgents wrappers around logic/

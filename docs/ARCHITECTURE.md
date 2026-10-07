@@ -1,4 +1,4 @@
-# ClaimShield Architecture
+# Amyna Architecture
 
 > Hackathon prototype. All demo data is synthetic. Not HIPAA-production-ready.
 
@@ -183,7 +183,7 @@ Decisions made while building the scaffold. Change them through a PR to `main`.
 | D11 | **Mock voice calls run synchronously and deterministically**; the live adapter runs the realtime WebSocket loop on a background thread with its own DB sessions. Mock call cursor state lives in process memory (single Core worker). | Deterministic tests/smoke; realistic structure for live. |
 | D12 | **Dial allowlist.** Core only dials numbers in `TELEPHONY_ALLOWED_NUMBERS`, in every mode. | A demo must never accidentally call a real insurer. |
 | D13 | **The voice model never chooses the case.** The tool-call dispatcher injects `case_id`/`call_id`; the model only supplies tool-specific arguments. | Prevents cross-case data access through prompt injection on the call. |
-| D14 | **Human resolution notes are scanned for sensitive data** and rejected (422) if they contain an SSN-like value, PIN, or password. | ClaimShield must never store the secrets it refuses to say. |
+| D14 | **Human resolution notes are scanned for sensitive data** and rejected (422) if they contain an SSN-like value, PIN, or password. | Amyna must never store the secrets it refuses to say. |
 | D15 | **Live-call guardrails are post-hoc for audio.** In realtime voice, audio is generated with its transcript, so `check_agent_utterance` runs on transcript events and interrupts/pauses on violation; prevention relies on tool-gated facts + the system prompt. | Honest limitation of realtime audio; documented in SECURITY.md. |
 | D16 | **SQLite fallback everywhere except docker-compose.** `DATABASE_URL` empty → `.data/claimshield.db`. Tests use temp-file SQLite. | Zero-dependency local dev and CI. |
 | D17 | **Packaging.** `shared/python` → `claimshield-contracts`; repo-root `pyproject.toml` → `claimshield-libs` (`intelligence`, `finchnode`, `fetch`); `core/` → `claimshield-core` (package `app`). One `.venv` holds everything (uagents' pins are compatible with FastAPI's stack). | Plain imports everywhere, no `PYTHONPATH` hacks. |

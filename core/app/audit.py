@@ -136,11 +136,11 @@ def configure_logging(level: str = "INFO") -> None:
     handlers (idempotent)."""
     root = logging.getLogger()
     root.setLevel(level.upper())
-    if not any(getattr(h, "_claimshield", False) for h in root.handlers):
+    if not any(getattr(h, "_Amyna", False) for h in root.handlers):
         handler = logging.StreamHandler()
         handler.setFormatter(JsonFormatter())
         handler.addFilter(PhiRedactingFilter())
-        handler._claimshield = True  # type: ignore[attr-defined]
+        handler._Amyna = True  # type: ignore[attr-defined]
         root.addHandler(handler)
     for name in THIRD_PARTY_LOGGERS:
         for handler in logging.getLogger(name).handlers:

@@ -1,4 +1,4 @@
-"""Enumerations shared by every ClaimShield service.
+"""Enumerations shared by every Amyna service.
 
 String values are part of the wire contract (HTTP JSON and uAgents messages).
 Adding a member is a minor contract change; renaming or removing one is breaking.

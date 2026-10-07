@@ -1,4 +1,4 @@
-"""ClaimShield intelligence library (Member 4). Pure Python, no DB, no network
+"""Amyna intelligence library (Member 4). Pure Python, no DB, no network
 except the optional Ollama extractor.
 
 - extraction/   transcript -> entities (rules | Qwen3 via Ollama)

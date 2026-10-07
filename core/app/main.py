@@ -22,7 +22,7 @@ from .routers import cases, claims, disputes, health, human, relay_webhook, tool
 log = logging.getLogger("claimshield.core")
 
 DESCRIPTION = """
-ClaimShield Core owns the case (single source of truth).
+Amyna Core owns the case (single source of truth).
 
 * **Public API** — used by the Relay service and other clients (Bearer service token).
 * **/internal/tools/** — used by Fetch agents and the voice manager; scoped per caller.
@@ -73,7 +73,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         log.warning("%s is empty; using the built-in development value", name)
 
     app = FastAPI(
-        title="ClaimShield Core",
+        title="Amyna Core",
         version=__version__,
         description=DESCRIPTION,
         openapi_tags=TAGS,

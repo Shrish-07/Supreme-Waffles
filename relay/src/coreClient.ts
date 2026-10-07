@@ -1,5 +1,5 @@
 /**
- * Typed client for ClaimShield Core. The Relay service talks ONLY to Core.
+ * Typed client for Amyna Core. The Relay service talks ONLY to Core.
  * Types are generated from Core's OpenAPI (`make ts-types` -> shared/ts/core.ts).
  */
 import type { components } from "../../shared/ts/core";

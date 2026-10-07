@@ -1,6 +1,6 @@
 # Security & Safety
 
-> **Prototype disclaimer.** ClaimShield is a hackathon prototype. It is **not**
+> **Prototype disclaimer.** Amyna is a hackathon prototype. It is **not**
 > HIPAA-compliant and has not had a security review. Use **synthetic data only**:
 > no real patients, member IDs, phone numbers, recordings, or credentials.
 

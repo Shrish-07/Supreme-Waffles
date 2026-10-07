@@ -29,10 +29,10 @@ export const HANDOFF_BUTTONS: Button[] = [BUTTONS.done, BUTTONS.cancel];
 
 /** Must be >= 10 chars; stored verbatim as the consent text in Core. */
 export const DATA_CONSENT_TEXT =
-  "I allow ClaimShield to read my FinchNode health records (encounters, procedures, " +
+  "I allow Amyna to read my FinchNode health records (encounters, procedures, " +
   "medications and claims) to review this bill.";
 export const RECORDING_CONSENT_TEXT =
-  "I agree that ClaimShield may record and transcribe this appointment for my bill review.";
+  "I agree that Amyna may record and transcribe this appointment for my bill review.";
 
 /** The extractor marks ruled-out services as "NOT anesthesia"; patients read "no anesthesia". */
 function describeEvidence(item: { description: string; negated?: boolean }): string {
@@ -47,7 +47,7 @@ export function listItems(items: string[]): string {
 
 export const copy = {
   welcome:
-    "Hi! I'm ClaimShield. I compare your medical bills with your health records and visit " +
+    "Hi! I'm Amyna. I compare your medical bills with your health records and visit " +
     "recordings, flag possible billing errors, and help you dispute them.\n\n" +
     "Please send your FinchNode patient ID to get started.",
   dataConsent: (): OutboundMessage => ({
