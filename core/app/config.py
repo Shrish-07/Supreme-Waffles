@@ -75,7 +75,10 @@ class Settings(BaseSettings):
     telnyx_webhook_verify: bool = True
     public_base_url: str = ""
     xai_sip_uri: str = ""
-    telephony_allowed_numbers: str = "+15555550100"
+    # Both demo insurers: the original synthetic line (+15555550100) and the
+    # demo roster's current payer line from finchnode/fixtures + contracts
+    # demo_scenario.json (+12487208903). Comma-separated E.164 list.
+    telephony_allowed_numbers: str = "+15555550100,+12487208903"
     # Human merge: a handoff (SSN/PIN request...) dials this phone and
     # bridges the human into the call. Must also be in TELEPHONY_ALLOWED_NUMBERS.
     human_handoff_phone: str = ""

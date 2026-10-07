@@ -238,7 +238,8 @@ def _ready_to_call(tmp_path: Path):
     app = build_isolated_app(
         tmp_path / "merge.db",
         human_handoff_phone="+15555550199",
-        telephony_allowed_numbers="+15555550100,+15555550199",
+        # The demo payer line (from the fixtures) + the human-merge line.
+        telephony_allowed_numbers="+12487208903,+15555550199",
     )
     client = TestClient(app)
     relay = service_headers(app.state.container.settings, ServiceName.RELAY)
