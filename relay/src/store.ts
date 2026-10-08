@@ -56,7 +56,21 @@ export class ConversationStore {
     return [...this.conversations.values()].find((c) => c.caseId === caseId);
   }
 
+  /** New bill review for the same person. Keeps the saved FinchNode patient ID. */
   reset(userId: string): Conversation {
+    const patientId = this.conversations.get(userId)?.finchnodePatientId;
+    const fresh: Conversation = {
+      userId,
+      stage: "new",
+      delivered: {},
+      ...(patientId ? { finchnodePatientId: patientId } : {}),
+    };
+    this.conversations.set(userId, fresh);
+    return fresh;
+  }
+
+  /** Forget the saved FinchNode ID so they can set up as someone else. */
+  clearAccount(userId: string): Conversation {
     this.conversations.delete(userId);
     return this.get(userId);
   }

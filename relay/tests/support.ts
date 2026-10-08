@@ -31,7 +31,7 @@ export class StubCore implements CoreApi {
     });
   }
 
-  async createCase() {
+  async createCase(_body?: Schemas["CaseCreate"]) {
     return { case_id: CASE } as Schemas["Case"];
   }
   async recordConsent(_caseId: string, body: Schemas["ConsentCreate"]) {

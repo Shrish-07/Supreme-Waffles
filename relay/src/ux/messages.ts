@@ -49,7 +49,12 @@ export const copy = {
   welcome:
     "Hi! I'm ClaimShield. I compare your medical bills with your health records and visit " +
     "recordings, flag possible billing errors, and help you dispute them.\n\n" +
-    "Please send your FinchNode patient ID to get started.",
+    "Quick setup (once): send your FinchNode patient ID. I'll save it for this chat and " +
+    "connect to FinchNode as you from now on.",
+  accountSaved: (patientId: string) =>
+    `You're set. I'll use FinchNode patient ${patientId} for this chat. Send "switch" later if that's the wrong person.`,
+  welcomeBack: (patientId: string) =>
+    `Welcome back. I'll connect to FinchNode as ${patientId}. Send "switch" if that's the wrong person.`,
   dataConsent: (): OutboundMessage => ({
     text: `To review your bills I need your permission:\n\n"${DATA_CONSENT_TEXT}"`,
     buttons: [BUTTONS.consentYes, BUTTONS.consentNo],
@@ -92,7 +97,7 @@ export const copy = {
     buttons: [BUTTONS.reviewBill],
   }),
   reviewing: "Reviewing your bill against your records and visit recording...",
-  restart: "Send \"restart\" to review another bill.",
+  restart: "Send anything to review another bill — I'll keep using your FinchNode account.",
   notUnderstood: "Sorry, I didn't catch that. Please use the buttons above.",
   coreRejected: (code: string) =>
     `Sorry, I couldn't do that step (${code}). Send "restart" to start over if you're stuck.`,

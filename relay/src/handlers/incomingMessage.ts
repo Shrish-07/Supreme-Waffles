@@ -13,7 +13,14 @@ import { answerOpenPrompt, captureClaimId, replyToNotification, reviewBill } fro
 import { answerDataConsent, askDataConsent } from "./consent";
 import { type HandlerContext, say, serialize } from "./context";
 
-const PATIENT_ID = /fn_pat_[A-Za-z0-9_]+/;
+const PATIENT_ID = /\b(?:fn_pat_[A-Za-z0-9_]+|patient-[A-Za-z0-9_-]+|u_[A-Za-z0-9]+)\b/i;
+const LOOSE_PATIENT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{3,80}$/;
+
+export function parsePatientId(text: string | undefined): string | undefined {
+  const trimmed = text?.trim() ?? "";
+  return trimmed.match(PATIENT_ID)?.[0] ?? (LOOSE_PATIENT_ID.test(trimmed) ? trimmed : undefined);
+}
+
 const TEXT_CHOICES: Record<string, string> = {
   yes: "YES",
   y: "YES",
@@ -33,7 +40,26 @@ export function normalizeText(text: string | undefined): string | undefined {
   return TEXT_CHOICES[text.trim().toLowerCase().replace(/[.!]+$/, "")];
 }
 
+async function openCase(
+  ctx: HandlerContext,
+  convo: Conversation,
+  patientId: string,
+): Promise<void> {
+  const created = await ctx.core.createCase({
+    patient: { finchnode_patient_id: patientId },
+    channel: "relay",
+  });
+  convo.finchnodePatientId = patientId;
+  convo.caseId = created.case_id;
+  await askDataConsent(ctx, convo);
+}
+
 async function start(ctx: HandlerContext, convo: Conversation): Promise<void> {
+  if (convo.finchnodePatientId) {
+    await say(ctx, convo, copy.welcomeBack(convo.finchnodePatientId));
+    await openCase(ctx, convo, convo.finchnodePatientId);
+    return;
+  }
   await say(ctx, convo, copy.welcome);
   convo.stage = "awaiting_patient_id";
 }
@@ -43,20 +69,14 @@ async function capturePatientId(
   convo: Conversation,
   text: string | undefined,
 ): Promise<void> {
-  const patientId = text?.match(PATIENT_ID)?.[0];
+  const patientId = parsePatientId(text);
   if (!patientId) {
-    await say(ctx, convo, "Please send your FinchNode patient ID (it starts with fn_pat_).");
+    await say(ctx, convo, "Please send your FinchNode patient ID (the one FinchNode assigned).");
     return;
   }
-  if (!convo.caseId || convo.finchnodePatientId !== patientId) {
-    const created = await ctx.core.createCase({
-      patient: { finchnode_patient_id: patientId },
-      channel: "relay",
-    });
-    convo.finchnodePatientId = patientId;
-    convo.caseId = created.case_id;
-  }
-  await askDataConsent(ctx, convo);
+  const firstTime = !convo.finchnodePatientId;
+  if (firstTime) await say(ctx, convo, copy.accountSaved(patientId));
+  await openCase(ctx, convo, patientId);
 }
 
 /** One patient event; serialized per patient. Core 4xx errors become a patient message
@@ -66,7 +86,12 @@ export function handleIncoming(ctx: HandlerContext, event: InboundEvent): Promis
     try {
       await route(ctx, event);
     } catch (error) {
-      if (!(error instanceof CoreError) || error.status >= 500) throw error;
+      // 5xx usually means "retry later", but FinchNode 404s arrive as 502
+      // finchnode_unavailable. Retrying those kills the Relay listener.
+      const patientFacing =
+        error instanceof CoreError &&
+        (error.status < 500 || error.code === "finchnode_unavailable");
+      if (!patientFacing) throw error;
       ctx.log(`core rejected ${event.kind} (${error.status} ${error.code})`);
       await say(ctx, ctx.store.get(event.from), copy.coreRejected(error.code));
     } finally {
@@ -77,7 +102,14 @@ export function handleIncoming(ctx: HandlerContext, event: InboundEvent): Promis
 
 async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
   let convo = ctx.store.get(event.from);
-  if (event.text?.trim().toLowerCase() === "restart") {
+  const command = event.text?.trim().toLowerCase();
+  if (command === "switch") {
+    convo = ctx.store.clearAccount(event.from);
+    await say(ctx, convo, copy.welcome);
+    convo.stage = "awaiting_patient_id";
+    return;
+  }
+  if (command === "restart") {
     convo = ctx.store.reset(event.from);
     await start(ctx, convo);
     return;
@@ -97,8 +129,13 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
     return;
   }
   switch (convo.stage) {
-    case "new":
+    case "new": {
+      const patientId = parsePatientId(event.text);
+      if (patientId && !convo.finchnodePatientId) {
+        return await capturePatientId(ctx, convo, event.text);
+      }
       return await start(ctx, convo);
+    }
     case "awaiting_patient_id":
       return await capturePatientId(ctx, convo, event.text);
     case "awaiting_data_consent":
@@ -120,6 +157,7 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
     case "in_review":
       return await answerOpenPrompt(ctx, convo, choice, event.id);
     case "done":
-      return await say(ctx, convo, copy.restart);
+      convo = ctx.store.reset(event.from);
+      return await start(ctx, convo);
   }
 }
