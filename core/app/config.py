@@ -239,7 +239,7 @@ class Settings(BaseSettings):
         if missing:
             lines = "\n".join(f"  - {item}" for item in missing)
             raise ConfigError(
-                "ClaimShield Core cannot start: live integrations are missing settings.\n"
+                "Amyna Core cannot start: live integrations are missing settings.\n"
                 f"{lines}\n"
                 "Fill these in .env (see docs/SETUP_KEYS.md) or switch the flag back to mock."
             )

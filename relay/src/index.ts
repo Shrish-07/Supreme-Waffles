@@ -1,5 +1,5 @@
 /**
- * ClaimShield Relay service.
+ * Amyna Relay service.
  *   POST /webhook/relay   Relay platform events (signature-verified in live mode, idempotent)
  *   POST /internal/notify Core -> patient notifications (bearer RELAY_SERVICE_TOKEN)
  *   GET  /health
@@ -12,6 +12,8 @@ import { REPO_ROOT, loadConfig, loadDotEnv } from "./config";
 loadDotEnv(resolve(REPO_ROOT, ".env"));
 const config = loadConfig();
 const server = createApp(createContext(config));
-server.listen(config.port, () => {
-  console.log(`[relay] listening on :${config.port} (RELAY_MODE=${config.mode}, core=${config.coreBaseUrl})`);
+server.listen(config.port, "0.0.0.0", () => {
+  console.log(
+    `[relay] listening on 0.0.0.0:${config.port} (RELAY_MODE=${config.mode}, core=${config.coreBaseUrl})`,
+  );
 });

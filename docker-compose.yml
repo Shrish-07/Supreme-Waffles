@@ -1,4 +1,4 @@
-# ClaimShield local stack.
+# Amyna local stack.
 #   make dev                          -> core + db
 #   docker compose --profile relay up -> + Relay service
 #   docker compose --profile agents up -> + Fetch agents (needs *_SEED in .env)

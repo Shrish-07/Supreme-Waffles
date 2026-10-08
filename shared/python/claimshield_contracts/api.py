@@ -167,7 +167,7 @@ class DisputeApproval(InputModel):
         min_length=10, description="Exact authorization wording the patient saw and accepted."
     )
     authorize_call: bool = Field(
-        default=True, description="Also authorize ClaimShield to call the insurer."
+        default=True, description="Also authorize Amyna to call the insurer."
     )
 
 

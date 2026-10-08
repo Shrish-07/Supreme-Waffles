@@ -1,6 +1,6 @@
 # Amyna
 
-> **Hackathon prototype — all demo data is synthetic.** ClaimShield is **not
+> **Hackathon prototype — all demo data is synthetic.** Amyna is **not
 > HIPAA-compliant and not production-ready**. Do not use real patient data, member IDs,
 > recordings, phone numbers or credentials. See [docs/SECURITY.md](docs/SECURITY.md).
 

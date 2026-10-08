@@ -36,8 +36,8 @@ make agents-hello          # HELLO_WORLD=1, orchestrator only, port 8000, mailbo
    show `fetch/agentverse/agent_profiles/orchestrator.md` (published via `readme_path`) and the
    chat protocol manifest (`publish_manifest=True`).
 3. Optionally set a handle: `ORCHESTRATOR_HANDLE=claimshield` (VERIFY handle rules).
-4. In ASI:One (https://asi1.ai), search for ClaimShield or chat with the agent address and
-   send "hi". Expected reply: **Hello from ClaimShield**. Every message is acknowledged
+4. In ASI:One (https://asi1.ai), search for Amyna or chat with the agent address and
+   send "hi". Expected reply: **Hello from Amyna**. Every message is acknowledged
    (`ChatAcknowledgement`) before the reply.
 
 If the log shows `CERTIFICATE_VERIFY_FAILED` on macOS (python.org builds), run

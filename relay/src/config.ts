@@ -87,7 +87,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RelayConfig {
   if (!config.coreWebhookSecret) missing.push("CORE_WEBHOOK_SECRET is required when APP_ENV=prod");
   if (missing.length) {
     throw new ConfigError(
-      `ClaimShield Relay cannot start:\n  - ${missing.join("\n  - ")}\n` +
+      `Amyna Relay cannot start:\n  - ${missing.join("\n  - ")}\n` +
         "Fill these in .env (see docs/SETUP_KEYS.md) or switch RELAY_MODE back to mock.",
     );
   }

@@ -96,7 +96,7 @@ def render_letter(
         "Please reprocess the claim accordingly and send me the corrected explanation of "
         "benefits, or the documentation that supports each charge.",
         "",
-        "Prepared by ClaimShield at the member's request (synthetic demo data).",
+        "Prepared by Amyna at the member's request (synthetic demo data).",
     ]
     return "\n".join(lines)
 

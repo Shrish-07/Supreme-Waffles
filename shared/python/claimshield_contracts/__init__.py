@@ -1,4 +1,4 @@
-"""ClaimShield shared contracts.
+"""Amyna shared contracts.
 
 Modules:
     enums           wire-level enumerations

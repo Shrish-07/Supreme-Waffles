@@ -1302,7 +1302,7 @@ export interface components {
             authorization_text: string;
             /**
              * Authorize Call
-             * @description Also authorize ClaimShield to call the insurer.
+             * @description Also authorize Amyna to call the insurer.
              * @default true
              */
             authorize_call?: boolean;
