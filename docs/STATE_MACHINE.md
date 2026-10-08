@@ -34,6 +34,27 @@ stateDiagram-v2
     CALL_IN_PROGRESS --> RESOLVED: insurer response recorded
     HUMAN_REQUIRED --> RESOLVED: insurer response recorded
     RESOLVED --> [*]
+
+On the call itself, the 17A human-merge lifecycle is a separate, first-class
+sub-state machine on `call_sessions.merge_phase`:
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    a(AI_CALLING) --> s(SENSITIVE_REQUEST_DETECTED): security policy fired
+    s --> b(PATIENT_BEING_CONNECTED): dial_human starts
+    b --> c(PATIENT_CONNECTED_WITH_HUMAN): bridged
+    c --> d(PATIENT_HANDLING_VERIFICATION): patient answers "done?"
+    d --> r(PATIENT_RELEASED)
+    r --> g(AI_RESUMING): only after explicit patient DONE
+    g --> a
+    b --> f(MERGE_FAILED): timeout / dial failure
+```
+
+`MERGE_FAILED` never auto-resumes the AI; only an explicit patient decision
+resolves the call (the pairing intervention remains open, terminal state
+`RESOLVED`/`FAILED` sits on `cases`, not on the merge lifecycle).
+
     REJECTED --> [*]
     FAILED --> [*]
     note right of FAILED

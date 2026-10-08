@@ -41,10 +41,19 @@ flowchart LR
 * The **orchestrator** is the only public Fetch/Agentverse agent. The Visit, Claim
   and Dispute agents are **internal** and never published.
 * The **agents do no private work directly** — they call Core's scoped
-  `/internal/tools/*`, and Core is where authorization is decided.
-* The **language layer** (`assistant_service.py`) understands plain language and
-  insurance terms. It proposes candidates, never conclusions: every extracted
-  identifier is a candidate the deterministic backend verifies before acting.
+  `/internal/tools/*`; `get_patient_context` is the only door to patient identity,
+  and Core is where authorization is decided.
+* The **language layer** (`assistant_service.py` + the `/assistant/*` endpoints)
+  understands plain language and insurance terms over stateless HTTP. It proposes
+  candidates, never conclusions: every extracted identifier is a candidate the
+  deterministic backend verifies before acting.
+* **Cases belong to authenticated users.** Relay forwards a patient session
+  token on every patient call; a typed `fn_pat_...` is an identifier, never a
+  credential, and an Agentverse sender address is never proof of identity.
+* On an insurer call, Amyna runs a **first-class human-merge state**:
+  `sensitive_request_detected → patient_being_connected → patient_connected →
+  patient_handling_verification → patient_released → ai_resuming`, with
+  `merge_failed` whenever the patient cannot be reached.
 
 ## The patient experience
 
@@ -88,6 +97,7 @@ make relay-demo   # the Relay patient conversation (mock Relay adapter)
 | `core/` | FastAPI Core: DB (SQLAlchemy 2 + Alembic), state machine, auth, audit, tools, adapters, voice call manager, Amyna language layer |
 | `shared/` | Contracts: Pydantic models, HTTP + tool schemas, uAgents messages, OpenAPI, generated TS |
 | `relay/` | Relay patient-experience service (Node/TS) |
+| `deploy/` | Production compose stack, backups, job worker docs |
 | `fetch/` | uAgents orchestrator + internal specialists, pure logic, `local_direct` runner, Agentverse docs |
 | `finchnode/` | FinchNode client (mock / demo / sandbox / production), normalization, tools |
 | `intelligence/` | Extraction (rules / Qwen3 via Ollama), code resolver, hospital prices, policy RAG, discrepancy engine |
@@ -140,14 +150,15 @@ See [docs/SETUP_KEYS.md](docs/SETUP_KEYS.md) for the full list. The main ones:
 
 ## Testing
 
-* `make test` — 250+ Python tests (unit, state machine, security policy, failure
-  paths, migrations, offline Bureau uAgents) + 40 Relay vitest tests, all
-  deterministic/offline.
+* `make test` — 300+ Python tests (unit, state machine, security policy,
+  migrations, assistant, identity, jobs/metrics, failure matrix, offline Bureau
+  uAgents) + 43 Relay vitest tests, all deterministic/offline.
 * `make smoke` — full mock end-to-end through the real Core HTTP API.
 * `make lint` — ruff + TS type-check.
 * Failure coverage includes duplicate webhooks/approvals/calls, wrong case ids,
-  malicious agent senders, a failed or partial specialist run, and retry-safe
-  human merges. No real patient PHI is used in any test.
+  malicious agent senders, partial specialist runs, revocations, Relay/Agentverse/
+  Telnyx/xAI outages, ambiguous identity, unreachable-patient merge timeouts,
+  and retry-safe human merges. No real patient PHI is used in any test.
 
 ## Docs
 
@@ -166,14 +177,17 @@ See [docs/SETUP_KEYS.md](docs/SETUP_KEYS.md) for the full list. The main ones:
 
 These are real and we don't claim otherwise:
 
-* Live xAI/Telnyx/FinchNode adapters are implemented but **not yet verified**
-  against the vendor APIs (every open item is in [VERIFY_LIST.md](docs/VERIFY_LIST.md)).
-* Real 24/7 deployment, managed secrets, backups and monitoring are out of scope
-  for this repo snapshot — staging/prod configs enforce correctness but the
-  infrastructure itself is provisioned per [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-* Real application-level patient authentication (the link between an Amyna
-  account and a FinchNode-authorized connection) is designed and gated in code,
-  and must be completed before real patients.
+* Live adapters are implemented and their vendor surfaces are now doc-verified
+  (xAI's realtime/SIP attach flow and Telnyx's webhook signing match the code),
+  but no live call has been placed yet — the remaining items are in
+  [VERIFY_LIST.md](docs/VERIFY_LIST.md) and gated until the first staging call.
+* Real 24/7 deployment is a scaffold, not a live fleet:
+  [deploy/](deploy) supplies the persistent stack (core + relay + agents + jobs +
+  Postgres + backups) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) is the runbook;
+  provisioning/accounts/monitoring are operator work.
+* Patient authentication exists end to end on the Relay path (sessions, hashed
+  tokens, case ownership, Finch links). Production still needs the identity
+  provider that issues those sessions; the ASI:One chat path stays demo-scoped.
 * All ship-able demo data is synthetic; **no claim here of verified live calls,
   four public agents, or HIPAA compliance.**
 
