@@ -71,13 +71,15 @@ CONSENT_TEXT = (
     "medications and claims) to review this bill."
 )
 WELCOME = (
-    "Hi! I'm **Amyna**. I compare your medical bill with your patient-authorized health "
-    "records and your visit recording, flag possible billing errors, and help you dispute them.\n\n"
-    "To start, send your **FinchNode patient ID** and the **claim number** "
-    "(for example `fn_pat_demo_001` and `CLM-2026-0915-001`)."
+    "Hi! I'm **Amyna**. I check medical bills against your health records and help fix "
+    "billing mistakes.\n\nTell me what's going on in your own words -- for example "
+    '*"this bill looks wrong"*. If you have them handy, I can also use your record '
+    "code (it starts with `fn_pat_`) and the claim number from the bill (starts with "
+    "`CLM-`) to look things up right away."
 )
 HELP_TEXT = (
-    "Send your FinchNode patient ID and claim number to start. Answer questions with "
+    "Tell me about the bill in plain words, or send your record code (`fn_pat_...`) "
+    "with the claim number (`CLM-...`) from the bill. Answer my questions with "
     "**YES / NO / NOT SURE**. Commands: STATUS, RESTART, HELP. Amyna never asks for "
     "your SSN, PINs or passwords."
 )
@@ -642,7 +644,10 @@ class ChatOrchestrator:
 
     def _status(self, session: ChatSession) -> str:
         if not session.case_id:
-            return "No bill under review yet. Send your FinchNode patient ID and claim number."
+            return (
+                "No bill under review yet. Send me your record code (`fn_pat_...`) and "
+                "the claim number (`CLM-...`) from the bill, or just tell me what happened."
+            )
         case = self._case(session)
         flagged = sum(f.amount_cents for f in case.findings)
         return (

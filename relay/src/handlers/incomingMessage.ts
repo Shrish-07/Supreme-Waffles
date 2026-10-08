@@ -45,7 +45,15 @@ async function capturePatientId(
 ): Promise<void> {
   const patientId = text?.match(PATIENT_ID)?.[0];
   if (!patientId) {
-    await say(ctx, convo, "Please send your FinchNode patient ID (it starts with fn_pat_).");
+    // Understand the patient's own words first; never demand an ID outright.
+    // Amyna replies in plain English, then guides gently only if needed.
+    const message = (text ?? "").trim();
+    if (message) {
+      const understood = await ctx.core.understandMessage(message);
+      await say(ctx, convo, `${understood.reply}\n\n${copy.idGuidance}`);
+    } else {
+      await say(ctx, convo, copy.idGuidance);
+    }
     return;
   }
   if (!convo.caseId || convo.finchnodePatientId !== patientId) {

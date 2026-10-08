@@ -17,7 +17,18 @@ from .audit import configure_logging
 from .config import Settings, get_settings
 from .container import Container, build_container
 from .errors import DomainError
-from .routers import cases, claims, disputes, health, human, relay_webhook, tools, visits, voice
+from .routers import (
+    assistant,
+    cases,
+    claims,
+    disputes,
+    health,
+    human,
+    relay_webhook,
+    tools,
+    visits,
+    voice,
+)
 
 log = logging.getLogger("claimshield.core")
 
@@ -41,6 +52,7 @@ TAGS = [
     {"name": "human", "description": "Human-in-the-loop questions and handoffs"},
     {"name": "voice", "description": "Insurer calls (Core owns the session)"},
     {"name": "relay", "description": "Signed events from the Relay service"},
+    {"name": "assistant", "description": "Stateless natural-language understanding"},
     {"name": "internal-tools", "description": "Agent + voice tools (scoped service tokens)"},
     {"name": "health", "description": "Liveness and configured modes"},
 ]
@@ -89,6 +101,17 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         response.headers["X-Amyna-Contracts-Version"] = CONTRACTS_VERSION
         return response
 
-    for module in (health, cases, visits, claims, disputes, human, voice, relay_webhook, tools):
+    for module in (
+        health,
+        cases,
+        visits,
+        claims,
+        disputes,
+        human,
+        voice,
+        relay_webhook,
+        tools,
+        assistant,
+    ):
         app.include_router(module.router)
     return app

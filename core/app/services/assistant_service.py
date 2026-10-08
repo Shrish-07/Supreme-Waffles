@@ -34,6 +34,8 @@ external calls, no PHI sent anywhere). A real model can be slotted behind the
 same hard policy boundary.
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -347,6 +349,47 @@ class HeuristicLanguageEngine:
                 "what happened."
             )
         return None
+
+
+def compose_reply(assistant: AssistantService, message: str) -> tuple[UnderstoodMessage, str]:
+    """Turn an understood message into ONE plain-English, ready-to-send reply.
+
+    Core composes replies; conversational surfaces (Relay, ASI:One) stay thin.
+    Replies never ask for identifiers directly and never mention workflow jargon.
+    """
+    understood = assistant.understand_patient_message(message)
+    details: list[str] = []
+    if understood.candidate_claim_number:
+        details.append(f"the claim number {understood.candidate_claim_number.value}")
+    if understood.candidate_amount_cents:
+        amount = int(understood.candidate_amount_cents.value) / 100
+        details.append(f"the amount ${amount:.2f}")
+    seen = (" I can already see " + " and ".join(details) + " on this bill.") if details else ""
+    if understood.intent == PatientIntent.EXPLAIN_TERM:
+        reply = assistant.explain_term(message).plain_language
+    elif understood.follow_up_question:
+        reply = understood.follow_up_question + seen
+    elif understood.intent == PatientIntent.DISPUTE_CHARGE:
+        reply = (
+            "I can look into that charge for you. Tell me a little about what happened, "
+            "or send me a photo of the bill." + seen
+        )
+    elif understood.intent == PatientIntent.REQUEST_CALL:
+        reply = (
+            "I can contact your insurance company for you. First, let's review the bill "
+            "together -- send me a photo of it or tell me what happened." + seen
+        )
+    elif understood.intent == PatientIntent.RECORD_VISIT:
+        reply = (
+            "Got it. If you recorded your visit, send me the recording and I'll note what "
+            "actually happened. Otherwise, tell me what the bill says and we'll compare." + seen
+        )
+    else:
+        reply = (
+            "I'm here to help with your medical bills. Tell me in your own words what's "
+            "going on -- for example 'this bill looks wrong' -- or send me a photo of it." + seen
+        )
+    return understood, reply
 
 
 def _fmt_amount(cents: int | None) -> str:

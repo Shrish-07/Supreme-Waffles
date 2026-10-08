@@ -96,6 +96,15 @@ export class CoreClient {
     return this.request("POST", "/voice/start", { case_id: caseId });
   }
 
+  /** Understand the patient's own words (Amyna's language layer lives in Core). */
+  understandMessage(message: string): Promise<Schemas["AssistantUnderstandResult"]> {
+    return this.request("POST", "/assistant/understand", { message });
+  }
+
+  explainTerm(term: string): Promise<Schemas["AssistantTermExplanation"]> {
+    return this.request("POST", "/assistant/explain", { term });
+  }
+
   /** Signed, idempotent event to Core's POST /relay/webhook (HMAC over "{ts}.{body}"). */
   async sendSignedEvent(event: Schemas["RelayWebhookEvent"]): Promise<Schemas["RelayWebhookResult"]> {
     const body = JSON.stringify(event);

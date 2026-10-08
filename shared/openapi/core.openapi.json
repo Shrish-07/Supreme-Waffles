@@ -128,6 +128,144 @@
         "title": "AgentRunStatus",
         "type": "string"
       },
+      "AssistantExplainIn": {
+        "additionalProperties": false,
+        "properties": {
+          "term": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term"
+        ],
+        "title": "AssistantExplainIn",
+        "type": "object"
+      },
+      "AssistantTermExplanation": {
+        "properties": {
+          "plain_language": {
+            "title": "Plain Language",
+            "type": "string"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term",
+          "plain_language"
+        ],
+        "title": "AssistantTermExplanation",
+        "type": "object"
+      },
+      "AssistantUnderstandIn": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "AssistantUnderstandIn",
+        "type": "object"
+      },
+      "AssistantUnderstandResult": {
+        "properties": {
+          "candidate_amount_cents": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Amount Cents"
+          },
+          "candidate_claim_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Claim Number"
+          },
+          "candidate_patient_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Patient Name"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "follow_up_question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follow Up Question"
+          },
+          "intent": {
+            "title": "Intent",
+            "type": "string"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "string"
+          },
+          "suggested_action": {
+            "title": "Suggested Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent",
+          "suggested_action",
+          "reply",
+          "confidence"
+        ],
+        "title": "AssistantUnderstandResult",
+        "type": "object"
+      },
+      "CallMergePhase": {
+        "description": "First-class lifecycle of the immediate human merge on a paused call (17A).\n\nSENSITIVE_REQUEST_DETECTED -> PATIENT_BEING_CONNECTED -> PATIENT_CONNECTED\n-> PATIENT_HANDLING_VERIFICATION -> PATIENT_RELEASED -> AI_RESUMING.\nMERGE_FAILED is the explicit failure escape (the AI is never auto-resumed).",
+        "enum": [
+          "sensitive_request_detected",
+          "patient_being_connected",
+          "patient_connected_with_human",
+          "patient_handling_verification",
+          "patient_released",
+          "ai_resuming",
+          "merge_failed"
+        ],
+        "title": "CallMergePhase",
+        "type": "string"
+      },
       "CallSession": {
         "properties": {
           "call_id": {
@@ -169,6 +307,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/InsurerResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "merge_phase": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CallMergePhase"
               },
               {
                 "type": "null"
@@ -4440,6 +4588,100 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/assistant/explain": {
+      "post": {
+        "description": "Explain insurance jargon in plain English.",
+        "operationId": "explain_assistant_explain_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantExplainIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantTermExplanation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Explain",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/assistant/understand": {
+      "post": {
+        "description": "Understand plain-English patient language and draft Amyna's next reply.",
+        "operationId": "understand_assistant_understand_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantUnderstandIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantUnderstandResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Understand",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
     "/cases": {
       "post": {
         "operationId": "create_case_cases_post",
@@ -6649,6 +6891,10 @@
     {
       "description": "Signed events from the Relay service",
       "name": "relay"
+    },
+    {
+      "description": "Stateless natural-language understanding",
+      "name": "assistant"
     },
     {
       "description": "Agent + voice tools (scoped service tokens)",

@@ -47,9 +47,15 @@ export function listItems(items: string[]): string {
 
 export const copy = {
   welcome:
-    "Hi! I'm Amyna. I compare your medical bills with your health records and visit " +
-    "recordings, flag possible billing errors, and help you dispute them.\n\n" +
-    "Please send your FinchNode patient ID to get started.",
+    "Hi! I'm Amyna. I check medical bills against your health records and help fix " +
+    "billing mistakes.\n\nTell me what's going on in your own words -- for example " +
+    "\"this bill looks wrong\" -- or send me a photo of the bill.",
+  // Shown only when the flow truly needs the patient ID (demo/sandbox identity).
+  // Explained in plain English; the patient never has to know terms in advance.
+  idGuidance:
+    "When you're ready, paste your patient ID (the code starting with fn_pat_ on " +
+    "your records paperwork) and I'll link your health records. If you don't know " +
+    "it, just tell me what the bill says and I'll help you find it.",
   dataConsent: (): OutboundMessage => ({
     text: `To review your bills I need your permission:\n\n"${DATA_CONSENT_TEXT}"`,
     buttons: [BUTTONS.consentYes, BUTTONS.consentNo],

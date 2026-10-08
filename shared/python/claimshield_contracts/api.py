@@ -263,3 +263,36 @@ class HealthStatus(ContractModel):
     app_env: str
     database: str
     modes: dict[str, str]
+
+
+# --------------------------------------------------------------------- assistant
+# The Amyna language layer (core/app/services/assistant_service.py) over HTTP.
+# These endpoints are STATELESS: no database access, no private data, no
+# authorization decisions -- they understand language and return candidates.
+
+
+class AssistantUnderstandIn(InputModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class AssistantUnderstandResult(ContractModel):
+    intent: str
+    # One of the allowlisted workflow nudges (never executed by the LLM layer).
+    suggested_action: str
+    # Ready-to-send, plain-English reply for the patient (conversational UIs).
+    reply: str
+    follow_up_question: str | None = None
+    # Candidates only: the caller must verify them before acting.
+    candidate_claim_number: str | None = None
+    candidate_patient_name: str | None = None
+    candidate_amount_cents: str | None = None
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class AssistantExplainIn(InputModel):
+    term: str = Field(min_length=1, max_length=200)
+
+
+class AssistantTermExplanation(ContractModel):
+    term: str
+    plain_language: str

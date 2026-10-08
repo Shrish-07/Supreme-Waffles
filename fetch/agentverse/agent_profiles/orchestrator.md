@@ -4,9 +4,16 @@ Amyna helps patients review healthcare bills by comparing claimed procedures aga
 
 ## What to send
 
-Your FinchNode patient ID and the claim number you want reviewed, for example:
+Just tell Amyna what's going on in your own words:
 
-> Please review my bill. My FinchNode patient ID is fn_pat_demo_001 and the claim is CLM-2026-0915-001.
+> This hospital bill looks wrong.
+
+If you have them handy, your record code (fn_pat_...) and the claim number from the
+bill (CLM-...) speed things up, for example:
+
+> Please review my bill. My patient ID is fn_pat_demo_001 and the claim is CLM-2026-0915-001.
+
+Don't know either code? That's fine -- describe the bill and Amyna will guide you.
 
 ## How it works
 

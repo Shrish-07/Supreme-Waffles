@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/assistant/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Explain
+         * @description Explain insurance jargon in plain English.
+         */
+        post: operations["explain_assistant_explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/understand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Understand
+         * @description Understand plain-English patient language and draft Amyna's next reply.
+         */
+        post: operations["understand_assistant_understand_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases": {
         parameters: {
             query?: never;
@@ -899,6 +939,52 @@ export interface components {
          * @enum {string}
          */
         AgentRunStatus: "running" | "succeeded" | "failed";
+        /** AssistantExplainIn */
+        AssistantExplainIn: {
+            /** Term */
+            term: string;
+        };
+        /** AssistantTermExplanation */
+        AssistantTermExplanation: {
+            /** Plain Language */
+            plain_language: string;
+            /** Term */
+            term: string;
+        };
+        /** AssistantUnderstandIn */
+        AssistantUnderstandIn: {
+            /** Message */
+            message: string;
+        };
+        /** AssistantUnderstandResult */
+        AssistantUnderstandResult: {
+            /** Candidate Amount Cents */
+            candidate_amount_cents?: string | null;
+            /** Candidate Claim Number */
+            candidate_claim_number?: string | null;
+            /** Candidate Patient Name */
+            candidate_patient_name?: string | null;
+            /** Confidence */
+            confidence: number;
+            /** Follow Up Question */
+            follow_up_question?: string | null;
+            /** Intent */
+            intent: string;
+            /** Reply */
+            reply: string;
+            /** Suggested Action */
+            suggested_action: string;
+        };
+        /**
+         * CallMergePhase
+         * @description First-class lifecycle of the immediate human merge on a paused call (17A).
+         *
+         *     SENSITIVE_REQUEST_DETECTED -> PATIENT_BEING_CONNECTED -> PATIENT_CONNECTED
+         *     -> PATIENT_HANDLING_VERIFICATION -> PATIENT_RELEASED -> AI_RESUMING.
+         *     MERGE_FAILED is the explicit failure escape (the AI is never auto-resumed).
+         * @enum {string}
+         */
+        CallMergePhase: "sensitive_request_detected" | "patient_being_connected" | "patient_connected_with_human" | "patient_handling_verification" | "patient_released" | "ai_resuming" | "merge_failed";
         /** CallSession */
         CallSession: {
             /** Call Id */
@@ -912,6 +998,7 @@ export interface components {
             /** Ended At */
             ended_at?: string | null;
             insurer_response?: components["schemas"]["InsurerResponse"] | null;
+            merge_phase?: components["schemas"]["CallMergePhase"] | null;
             /** Open Intervention Id */
             open_intervention_id?: string | null;
             /** Provider Call Ref */
@@ -2332,6 +2419,72 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    explain_assistant_explain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantExplainIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantTermExplanation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    understand_assistant_understand_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantUnderstandIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantUnderstandResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_case_cases_post: {
         parameters: {
             query?: never;

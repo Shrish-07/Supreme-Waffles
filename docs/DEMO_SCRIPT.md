@@ -43,7 +43,8 @@ Offline rehearsal of the exact same conversation (no Agentverse): `make chat`.
 
 | You type in ASI:One | Amyna replies (abridged) |
 |---|---|
-| "Hi Amyna, can you review my bill? My FinchNode patient ID is fn_pat_demo_001 and the claim is CLM-2026-0915-001." | Ack + "To review your bill I need your permission to read your FinchNode health records for this case. Reply YES to consent." |
+| "Hi Amyna, I think this hospital bill is wrong." | Ack + plain-English reply ("I can look into it..."), guidance to share the record code or claim number |
+| "My patient ID is fn_pat_demo_001 and the claim is CLM-2026-0915-001." | Ack + "To review your bill I need your permission to read your FinchNode health records for this case. Reply YES to consent." |
 | "Yes" | "Thanks — checking your visit evidence and claim…" → "Visit evidence: MRI brain with contrast; lorazepam 1 mg IV." → summary of **3 potential issues** ($1,070.00) → "**Did you receive anesthesia during your visit on 2026-09-15?** Reply YES, NO, or NOT SURE." |
 | "No" | Next question: "Your bill includes a $40.00 charge for an unspecified drug. Other than lorazepam and gadolinium contrast, did you receive any other medication during your visit on September 15, 2026?" |
 | "Not sure" | "Items to dispute: … Prepare a dispute package? (YES/NO)" |
