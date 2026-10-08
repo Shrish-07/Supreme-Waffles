@@ -2183,6 +2183,31 @@
         "title": "GetDisputeCaseRequest",
         "type": "object"
       },
+      "GetPatientContextRequest": {
+        "additionalProperties": false,
+        "description": "Ask Core for the case's authorized patient context (prompt task 6).\n\nThe language/agent layers never receive raw patient credentials; Core is the\nonly door to private data, and it answers with the minimum, consent-gated set.",
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "GetPatientContextRequest",
+        "type": "object"
+      },
       "GetSupportingEvidenceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3045,6 +3070,63 @@
           "claims"
         ],
         "title": "PatientClaims",
+        "type": "object"
+      },
+      "PatientContext": {
+        "description": "Minimum data a language layer may ever see for a case.",
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "finchnode_patient_id": {
+            "title": "Finchnode Patient Id",
+            "type": "string"
+          },
+          "has_health_data_consent": {
+            "title": "Has Health Data Consent",
+            "type": "boolean"
+          },
+          "member_ref_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Ref Masked"
+          },
+          "patient_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Display Name"
+          },
+          "payer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Name"
+          }
+        },
+        "required": [
+          "case_id",
+          "finchnode_patient_id",
+          "has_health_data_consent"
+        ],
+        "title": "PatientContext",
         "type": "object"
       },
       "PatientDataRequest": {
@@ -5811,6 +5893,52 @@
           }
         ],
         "summary": "FinchNode claims (consent-gated)",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_patient_context": {
+      "post": {
+        "operationId": "tool_get_patient_context",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetPatientContextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientContext"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Authorized, minimized patient context (identifiers only)",
         "tags": [
           "internal-tools"
         ]

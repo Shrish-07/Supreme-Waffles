@@ -470,6 +470,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/tools/get_patient_context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Authorized, minimized patient context (identifiers only) */
+        post: operations["tool_get_patient_context"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/tools/get_patient_encounters": {
         parameters: {
             query?: never;
@@ -1668,6 +1685,18 @@ export interface components {
             /** Case Id */
             case_id: string;
         };
+        /**
+         * GetPatientContextRequest
+         * @description Ask Core for the case's authorized patient context (prompt task 6).
+         *
+         *     The language/agent layers never receive raw patient credentials; Core is the
+         *     only door to private data, and it answers with the minimum, consent-gated set.
+         */
+        GetPatientContextRequest: {
+            agent_run?: components["schemas"]["AgentRunRef"] | null;
+            /** Case Id */
+            case_id: string;
+        };
         /** GetSupportingEvidenceRequest */
         GetSupportingEvidenceRequest: {
             agent_run?: components["schemas"]["AgentRunRef"] | null;
@@ -1953,6 +1982,24 @@ export interface components {
         PatientClaims: {
             /** Claims */
             claims: components["schemas"]["Claim"][];
+        };
+        /**
+         * PatientContext
+         * @description Minimum data a language layer may ever see for a case.
+         */
+        PatientContext: {
+            /** Case Id */
+            case_id: string;
+            /** Finchnode Patient Id */
+            finchnode_patient_id: string;
+            /** Has Health Data Consent */
+            has_health_data_consent: boolean;
+            /** Member Ref Masked */
+            member_ref_masked?: string | null;
+            /** Patient Display Name */
+            patient_display_name?: string | null;
+            /** Payer Name */
+            payer_name?: string | null;
         };
         /**
          * PatientDataRequest
@@ -3254,6 +3301,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PatientClaims"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tool_get_patient_context: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GetPatientContextRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientContext"];
                 };
             };
             /** @description Validation Error */

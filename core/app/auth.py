@@ -28,6 +28,7 @@ VOICE_TOOLS: frozenset[ToolName] = frozenset(
         ToolName.GET_SUPPORTING_EVIDENCE,
         ToolName.RECORD_INSURER_RESPONSE,
         ToolName.REQUEST_HUMAN,
+        ToolName.GET_PATIENT_CONTEXT,
     }
 )
 # Agents may do everything except record what the insurer said on a call.

@@ -59,3 +59,35 @@ def test_demo_sessions_are_disabled_in_production(
         pytest.raises(Forbidden),
     ):
         create_demo_session(db, app_env="prod", subject="relay:x")
+
+
+def test_patient_context_tool_returns_masked_identifiers(
+    client: TestClient, relay: dict[str, str], fetch: dict[str, str]
+) -> None:
+    """task 6: agents/LLMs ask Core for the authorized context; no raw identifiers."""
+    case = client.post(
+        "/cases",
+        json={
+            "patient": {
+                "finchnode_patient_id": "fn_pat_demo_001",
+                "member_ref": "SYN-MBR-000123",
+                "display_name": "Mary Doe",
+            },
+            "channel": "relay",
+        },
+        headers=relay,
+    ).json()
+    context = client.post(
+        "/internal/tools/get_patient_context", json={"case_id": case["case_id"]}, headers=fetch
+    ).json()
+    assert context["case_id"] == case["case_id"]
+    assert context["member_ref_masked"] == "•••123"
+    assert "SYN-MBR-000123" not in str(context)
+    assert context["has_health_data_consent"] is False
+    # Relay's identity lacks the tool scope; patient surfaces never call tools.
+    assert (
+        client.post(
+            "/internal/tools/get_patient_context", json={"case_id": case["case_id"]}, headers=relay
+        ).status_code
+        == 403
+    )
