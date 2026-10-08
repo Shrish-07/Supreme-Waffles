@@ -65,6 +65,40 @@ queue depth on async pipelines. See [docs/SECURITY.md](SECURITY.md) for the
 privacy and webhook rules, and [.env.production.example](../.env.production.example)
 for the full variable list.
 
+## What deploys (persistent, auto-restarting)
+
+`deploy/docker-compose.prod.yml` runs:
+
+| Service | Role |
+|---|---|
+| `db` | PostgreSQL 16 (volume + health check; backups via the `backup` service) |
+| `core` | Amyna Core API (the state owner; fails closed on missing live settings) |
+| `relay` | Node Relay service (patient-facing channel) |
+| `agents` | Fetch network: public `amyna-orchestrator` + internal specialists |
+| `jobs` | Durable-job worker (`scripts/job_worker.py` -> `/internal/jobs/drain`) |
+| `backup` | Daily `pg_dump` with rotation (see "Backups & restore") |
+
+All secrets come from the environment / a secrets manager (never committed).
+
+## Backups, encryption, least privilege (task 27)
+
+- Backups: the `backup` service dumps daily to a volume (`./backup.sh`),
+  rotating after `BACKUP_KEEP_DAYS` (default 14). **Restore testing**: restore a
+  dump into a scratch database and run `make smoke` against it before trusting
+  backups in an incident.
+- Encryption at rest: enable on your managed Postgres/volume; the dump volume
+  is PHI-adjacent storage and must inherit it.
+- Least privilege: the DB user must not be a superuser in production;
+  connection uses `DATABASE_URL` only, no public Postgres port.
+
+## Observability (task 29)
+
+`GET /internal/metrics` (scope `metrics:read`, the FETCH identity holds it)
+exposes request counts, average latency, queue depth, active calls, open
+interventions, and stuck cases. Point your monitor at it and alert on
+`dead > 0` in `queue_depth` or any stuck-case growth. Every response carries
+`X-Amyna-Request-Id` for tracing; logs are PHI-redacted (`core/app/audit.py`).
+
 ## Secrets rotation
 
 If a secret may have been exposed (a synced `.env`, logs, chat history), rotate it
