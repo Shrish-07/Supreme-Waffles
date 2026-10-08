@@ -64,6 +64,6 @@ describe("visit notes", () => {
   });
 
   it("says so plainly when nothing billable was heard", () => {
-    expect(copy.visitNotes([]).text).toMatch(/^I went through your visit but didn't hear/);
+    expect(copy.visitNotes([]).text).toMatch(/^I went through your visit but didn't match/);
   });
 });
