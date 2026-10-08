@@ -1,0 +1,60 @@
+# Free Render stack: one web service (Core + Relay) + Postgres.
+# Sign in at https://dashboard.render.com with GitHub (no credit card),
+# then New > Blueprint and select this repo.
+previewsEnabled: false
+
+databases:
+  - name: claimshield-db
+    plan: free
+    databaseName: claimshield
+    user: claimshield
+
+services:
+  - type: web
+    name: claimshield-sw
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: dev
+      - key: LOG_LEVEL
+        value: INFO
+      - key: NOTIFY_MODE
+        value: relay_service
+      - key: FETCH_MODE
+        value: local_direct
+      - key: RELAY_MODE
+        value: live
+      - key: RELAY_PORT
+        value: "3000"
+      - key: CORE_BASE_URL
+        value: http://127.0.0.1:8080
+      - key: RELAY_SERVICE_URL
+        value: http://127.0.0.1:3000
+      - key: EXTRACTION_MODE
+        value: rules
+      - key: FINCHNODE_MODE
+        value: sandbox
+      - key: XAI_VOICE_MODE
+        value: mock
+      - key: TELEPHONY_MODE
+        value: mock
+      - key: DATABASE_URL
+        fromDatabase:
+          name: claimshield-db
+          property: connectionString
+      - key: RELAY_AGENT_TOKEN
+        sync: false
+      - key: RELAY_WEBHOOK_SECRET
+        sync: false
+      - key: RELAY_API_BASE_URL
+        sync: false
+      - key: XAI_API_KEY
+        sync: false
+      - key: FINCHNODE_API_KEY
+        sync: false
+      - key: FINCHNODE_BASE_URL
+        sync: false

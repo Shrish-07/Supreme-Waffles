@@ -1,0 +1,18 @@
+# Pings the free Render service so it does not sleep after 15 minutes idle.
+# First Relay messages otherwise wait ~1 minute and often miss the webhook.
+name: keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake ClaimShield
+        continue-on-error: true
+        env:
+          KEEP_ALIVE_URL: ${{ vars.KEEP_ALIVE_URL }}
+        run: curl -fsS --max-time 90 "${KEEP_ALIVE_URL:-https://claimshield-sw.onrender.com/health}"
