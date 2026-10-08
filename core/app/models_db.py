@@ -198,6 +198,8 @@ class FindingRow(Base):
     issue_type: Mapped[str] = mapped_column(String(40))
     title: Mapped[str] = mapped_column(String(300))
     explanation: Mapped[str] = mapped_column(Text)
+    # Plain-English wording for the patient (task 12); None = use `explanation`.
+    patient_facing_explanation: Mapped[str | None] = mapped_column(Text)
     amount_cents: Mapped[int] = mapped_column(Integer)
     confidence: Mapped[float] = mapped_column(Float)
     human_confirmation_required: Mapped[bool] = mapped_column(Boolean)

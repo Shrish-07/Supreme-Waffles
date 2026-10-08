@@ -287,6 +287,10 @@ class DisputeCandidate(ContractModel):
     issue_type: IssueType
     title: str
     explanation: str
+    # Plain-English wording for the patient (task 12). Falls back to
+    # ``explanation`` when None; the language layer may never invent facts,
+    # it can only restate this and the evidence refs.
+    patient_facing_explanation: str | None = None
     amount_cents: int
     confidence: float = Field(ge=0.0, le=1.0)
     human_confirmation_required: bool

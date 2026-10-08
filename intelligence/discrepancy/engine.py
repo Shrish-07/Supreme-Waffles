@@ -274,6 +274,9 @@ class _Analysis:
                 status=FindingStatus.OPEN if needs_patient else FindingStatus.CONFIRMED,
                 recommended_action=action,
                 evidence_refs=refs,
+                # task 12: patient-facing wording is derived from the structured
+                # finding -- never invented by the language layer later.
+                patient_facing_explanation=f"{title}. {explanation}",
             )
         )
 

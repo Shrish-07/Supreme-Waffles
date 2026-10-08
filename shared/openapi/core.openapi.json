@@ -1551,6 +1551,17 @@
               }
             ]
           },
+          "patient_facing_explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Facing Explanation"
+          },
           "policy_citations": {
             "items": {
               "$ref": "#/components/schemas/PolicyCitation"

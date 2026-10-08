@@ -214,6 +214,7 @@ def record_findings(
             issue_type=f.issue_type.value,
             title=f.title,
             explanation=f.explanation,
+            patient_facing_explanation=f.patient_facing_explanation,
             amount_cents=f.amount_cents,
             confidence=f.confidence,
             human_confirmation_required=f.human_confirmation_required,

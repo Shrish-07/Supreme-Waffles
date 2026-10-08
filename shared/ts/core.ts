@@ -1524,6 +1524,8 @@ export interface components {
             /** Line Number */
             line_number: number;
             patient_answer?: components["schemas"]["PatientAnswer"] | null;
+            /** Patient Facing Explanation */
+            patient_facing_explanation?: string | null;
             /** Policy Citations */
             policy_citations?: components["schemas"]["PolicyCitation"][];
             recommended_action: components["schemas"]["DisputeAction"];

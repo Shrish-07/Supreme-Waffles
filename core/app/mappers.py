@@ -195,6 +195,7 @@ def finding_to_model(row: FindingRow) -> DisputeCandidate:
         issue_type=row.issue_type,
         title=row.title,
         explanation=row.explanation,
+        patient_facing_explanation=row.patient_facing_explanation,
         amount_cents=row.amount_cents,
         confidence=row.confidence,
         human_confirmation_required=row.human_confirmation_required,
