@@ -7031,6 +7031,32 @@
         ]
       }
     },
+    "/voice/xai/webhook": {
+      "post": {
+        "description": "Signed ``realtime.call.incoming`` from xAI for a bridged SIP call (task 15).\n\nHeaders (verified against the current xAI SIP docs): ``webhook-id``,\n``webhook-timestamp``, ``webhook-signature``. The payload's ``data.call_id``\nis attached to our call via the ``x-amyna-call-id`` SIP header we set on\nTelnyx's transfer; then the realtime WebSocket attaches with ``?call_id=``.",
+        "operationId": "xai_incoming_call_webhook_voice_xai_webhook_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Xai Incoming Call Webhook Voice Xai Webhook Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Xai Incoming Call Webhook",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
     "/voice/{call_id}": {
       "get": {
         "operationId": "get_call_voice__call_id__get",

@@ -55,10 +55,17 @@ class VoiceSessionConfig:
     model: str | None = None
     voice: str | None = None
     metadata: dict[str, str] = field(default_factory=dict)
+    # SIP bridge mode (task 15): the xAI-side call id from the inbound
+    # ``realtime.call.incoming`` webhook; when set, the realtime WS attaches with
+    # ``?call_id=...`` instead of starting a fresh ``?model=...`` conversation.
+    bridge_call_id: str | None = None
 
 
 class VoiceAdapter(ABC):
     mode: str
+    # True for SIP-bridged sessions: the WS only starts after the carrier leg
+    # has arrived at the voice vendor and produced an inbound-call webhook.
+    needs_sip_attach: bool = False
 
     @abstractmethod
     def start_session(self, config: VoiceSessionConfig, handler: VoiceEventHandler) -> None:

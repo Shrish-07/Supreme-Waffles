@@ -908,6 +908,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/voice/xai/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Xai Incoming Call Webhook
+         * @description Signed ``realtime.call.incoming`` from xAI for a bridged SIP call (task 15).
+         *
+         *     Headers (verified against the current xAI SIP docs): ``webhook-id``,
+         *     ``webhook-timestamp``, ``webhook-signature``. The payload's ``data.call_id``
+         *     is attached to our call via the ``x-amyna-call-id`` SIP header we set on
+         *     Telnyx's transfer; then the realtime WebSocket attaches with ``?call_id=``.
+         */
+        post: operations["xai_incoming_call_webhook_voice_xai_webhook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/voice/{call_id}": {
         parameters: {
             query?: never;
@@ -4130,6 +4155,28 @@ export interface operations {
         };
     };
     telnyx_webhook_voice_telnyx_webhook_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+        };
+    };
+    xai_incoming_call_webhook_voice_xai_webhook_post: {
         parameters: {
             query?: never;
             header?: never;

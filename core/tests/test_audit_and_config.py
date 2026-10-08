@@ -137,6 +137,7 @@ def _live_overrides(app_env: str, finchnode_mode: str) -> dict[str, object]:
         "telnyx_public_key": "pubkey",
         "telnyx_webhook_verify": True,
         "xai_sip_uri": "sip:test@sip.x.ai",
+        "xai_webhook_signing_secret": "whsec_test",  # SIP attach mode requires the secret
         "finchnode_mode": finchnode_mode,
         "finchnode_api_key": "ck_live" if finchnode_mode == "production" else "ck_test_x",
         "finchnode_base_url": "" if finchnode_mode == "production" else "https://sandbox.example",

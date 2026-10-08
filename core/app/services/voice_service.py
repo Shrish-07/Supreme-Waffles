@@ -216,12 +216,56 @@ class VoiceCallManager:
             voice=self._c.settings.xai_voice_name or None,
         )
         try:
-            self._c.voice.start_session(config, self)
+            if not self._c.voice.needs_sip_attach:
+                # Mock/test loopback adapters drive the session immediately.
+                self._c.voice.start_session(config, self)
+            # SIP mode: the session attaches only when xAI's signed
+            # realtime.call.incoming webhook arrives (/voice/xai/webhook).
         except Exception as exc:
             log.exception("voice session failed to start", extra={"fields": {"call_id": call_id}})
             self._quiet_hangup(dial.provider_call_ref)
             self._end(call_id, f"voice session failed: {type(exc).__name__}", failed=True)
             raise UpstreamError("The voice session could not be started.") from exc
+        return self.get_call(call_id)
+
+    def attach_sip_session(self, call_id: str, xai_call_id: str, *, actor: str) -> CallSession:
+        """SIP attach (task 15): start the realtime WS for the bridged insurer call.
+
+        Idempotent: a duplicate inbound webhook with the same call id is ignored.
+        The insurer leg stays alive in Telnyx while the session attaches.
+        """
+        with self._c.session_scope() as db:
+            call = _get_call(db, call_id)
+            if call.xai_call_ref == xai_call_id:
+                already = True
+            else:
+                already = False
+                call.xai_call_ref = xai_call_id
+                _append_turn(call, CallSpeaker.SYSTEM, "xAI bridged the insurer call.")
+                view = dispute_case_view(db, call.case_id)
+                case_id = call.case_id
+        if already:
+            return self.get_call(call_id)  # idempotent duplicate webhook
+        config = VoiceSessionConfig(
+            call_id=call_id,
+            case_id=case_id,
+            instructions=build_instructions(view),
+            tools=VOICE_TOOL_SCHEMAS,
+            case_context=view,
+            model=self._c.settings.xai_voice_model or None,
+            voice=self._c.settings.xai_voice_name or None,
+            bridge_call_id=xai_call_id,
+        )
+        try:
+            self._c.voice.start_session(config, self)
+        except Exception as exc:
+            log.exception("sip attach failed", extra={"fields": {"call_id": call_id}})
+            with self._c.session_scope() as db:
+                call = _get_call(db, call_id)
+                ref = call.provider_call_ref
+            self._quiet_hangup(ref)
+            self._end(call_id, f"sip attach failed: {type(exc).__name__}", failed=True)
+            raise UpstreamError("The voice session could not attach to the call.") from exc
         return self.get_call(call_id)
 
     def get_call(self, call_id: str) -> CallSession:

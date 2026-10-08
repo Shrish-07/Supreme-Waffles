@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     xai_voice_model: str = ""
     xai_voice_name: str = ""
     telephony_mode: Literal["mock", "live"] = "mock"
+    # The signing secret xAI returns when the SIP phone number is registered
+    # (docs: speech-to-speech/sip). Required when live voice bridges calls.
+    xai_webhook_signing_secret: str = ""
     telnyx_api_key: str = ""
     telnyx_connection_id: str = ""
     telnyx_phone_number: str = ""
@@ -198,6 +201,11 @@ class Settings(BaseSettings):
                 ("XAI_API_KEY", self.xai_api_key),
                 ("XAI_REALTIME_URL", self.xai_realtime_url),
             )
+            if self.telephony_mode == "live":
+                need(
+                    "TELEPHONY_MODE=live + XAI_VOICE_MODE=live",
+                    ("XAI_WEBHOOK_SIGNING_SECRET", self.xai_webhook_signing_secret),
+                )
         if self.telephony_mode == "live":
             live_pairs = [
                 ("TELNYX_API_KEY", self.telnyx_api_key),

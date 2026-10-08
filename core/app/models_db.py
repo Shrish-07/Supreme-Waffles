@@ -281,6 +281,8 @@ class CallRow(Base):
     merge_phase: Mapped[str | None] = mapped_column(String(32))
     # While PATIENT_BEING_CONNECTED: the safe deadline for the human to answer.
     merge_deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # xAI-side call id after the carrier leg bridges to xAI SIP (task 15).
+    xai_call_ref: Mapped[str | None] = mapped_column(String(120))
     to_number_masked: Mapped[str | None] = mapped_column(String(32))
     turns: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     insurer_response: Mapped[dict[str, Any] | None] = mapped_column(JSON)
