@@ -55,12 +55,19 @@ log = logging.getLogger("claimshield.cases")
 
 
 def create_case(
-    db: Session, *, patient: PatientRef, channel: Channel, external_ref: str | None, actor: str
+    db: Session,
+    *,
+    patient: PatientRef,
+    channel: Channel,
+    external_ref: str | None,
+    actor: str,
+    owner_id: str | None = None,
 ) -> CaseRow:
     case = CaseRow(
         id=new_id("case"),
         state=CaseState.CREATED.value,
         channel=channel.value,
+        user_id=owner_id,
         finchnode_patient_id=patient.finchnode_patient_id,
         patient_display_name=patient.display_name,
         member_ref=patient.member_ref,

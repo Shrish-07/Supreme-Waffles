@@ -44,6 +44,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Session
+         * @description Issue an opaque session token (demo environments; disabled in prod).
+         */
+        post: operations["start_session_auth_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases": {
         parameters: {
             query?: never;
@@ -976,6 +996,30 @@ export interface components {
             suggested_action: string;
         };
         /**
+         * AuthSessionCreate
+         * @description Start an Amyna session for a verified identity subject.
+         *
+         *     In dev/test/staging this issues a demo session (synthetic identities only).
+         *     In production this endpoint is disabled: the identity provider (e.g. the
+         *     Relay platform's verified user) must supply the Amyna-issued session token.
+         */
+        AuthSessionCreate: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Subject */
+            subject: string;
+        };
+        /** AuthSessionResult */
+        AuthSessionResult: {
+            /**
+             * Patient Token
+             * @description Opaque bearer token; Core stores only its hash. Not PHI.
+             */
+            patient_token: string;
+            /** User Id */
+            user_id: string;
+        };
+        /**
          * CallMergePhase
          * @description First-class lifecycle of the immediate human merge on a paused call (17A).
          *
@@ -1348,8 +1392,6 @@ export interface components {
         DecisionType: "finding_answer" | "handoff_resolution" | "dispute_approval" | "dispute_rejection";
         /** Dispute */
         Dispute: {
-            /** Approved At */
-            approved_at?: string | null;
             /** Case Id */
             case_id: string;
             /** Claim Id */
@@ -2472,6 +2514,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssistantUnderstandResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_session_auth_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthSessionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSessionResult"];
                 };
             };
             /** @description Validation Error */

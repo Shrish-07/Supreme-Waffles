@@ -12,6 +12,15 @@ export const CASE = "case_1";
 
 export class StubCore implements CoreApi {
   state = "CREATED";
+
+  startAuthSession = async () => ({
+    user_id: "user_test",
+    patient_token: "pt_test",
+  }) as Schemas["AuthSessionResult"];
+
+  withPatientToken(): CoreApi {
+    return this;
+  }
   notes: PatientNotification[] = [];
   events: Schemas["RelayWebhookEvent"][] = [];
   dispute: Record<string, unknown> | null = null;
@@ -140,6 +149,7 @@ export function setup(options: { voiceMemos?: boolean; transcriber?: Transcriber
     relay,
     store: new ConversationStore(),
     transcriber: options.transcriber ?? new MockTranscriber(),
+    patientTokens: new Map<string, string>(),
     log: () => undefined,
   };
   let counter = 0;

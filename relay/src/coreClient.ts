@@ -3,6 +3,7 @@
  * Types are generated from Core's OpenAPI (`make ts-types` -> shared/ts/core.ts).
  */
 import type { components } from "../../shared/ts/core";
+import type { CoreApi } from "./handlers/context";
 import { signCoreEvent } from "./webhook";
 
 export type Schemas = components["schemas"];
@@ -24,18 +25,37 @@ export class CoreError extends Error {
 
 type FetchLike = typeof fetch;
 
+// Forwarded on every patient-bound call; Core resolves it to the owning account.
+export const PATIENT_TOKEN_HEADER = "X-Amyna-Patient-Token";
+
 export class CoreClient {
   constructor(
     private readonly baseUrl: string,
     private readonly token: string,
     private readonly webhookSecret: string,
     private readonly fetchImpl: FetchLike = fetch,
+    private readonly patientToken: string | null = null,
   ) {}
 
+  /** A client that forwards the patient's session token (identity binding, task 19). */
+  withPatientToken(patientToken: string): CoreApi {
+    return new CoreClient(this.baseUrl, this.token, this.webhookSecret, this.fetchImpl, patientToken);
+  }
+
+  /** Dev/test/staging demo session for a relay user. Disabled in production. */
+  startAuthSession(body: Schemas["AuthSessionCreate"]): Promise<Schemas["AuthSessionResult"]> {
+    return this.request("POST", "/auth/session", body);
+  }
+
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.token}`,
+      "Content-Type": "application/json",
+    };
+    if (this.patientToken) headers[PATIENT_TOKEN_HEADER] = this.patientToken;
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
-      headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     return parse<T>(response);

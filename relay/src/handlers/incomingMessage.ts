@@ -11,7 +11,7 @@ import {
 } from "./appointmentRecording";
 import { answerOpenPrompt, captureClaimId, replyToNotification, reviewBill } from "./approvalFlow";
 import { answerDataConsent, askDataConsent } from "./consent";
-import { type HandlerContext, say, serialize } from "./context";
+import { type HandlerContext, patientScope, say, serialize } from "./context";
 
 const PATIENT_ID = /fn_pat_[A-Za-z0-9_]+/;
 const TEXT_CHOICES: Record<string, string> = {
@@ -71,14 +71,16 @@ async function capturePatientId(
  * (retrying would fail the same way); 5xx/network errors propagate so the platform retries. */
 export function handleIncoming(ctx: HandlerContext, event: InboundEvent): Promise<void> {
   return serialize(event.from, async () => {
+    // Attach this patient's identity first: cases belong to the signed-in user.
+    const scoped = { ...ctx, core: await patientScope(ctx, event.from) };
     try {
-      await route(ctx, event);
+      await route(scoped, event);
     } catch (error) {
       if (!(error instanceof CoreError) || error.status >= 500) throw error;
       ctx.log(`core rejected ${event.kind} (${error.status} ${error.code})`);
-      await say(ctx, ctx.store.get(event.from), copy.coreRejected(error.code));
+      await say(scoped, scoped.store.get(event.from), copy.coreRejected(error.code));
     } finally {
-      ctx.store.save();
+      scoped.store.save();
     }
   });
 }

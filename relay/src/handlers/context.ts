@@ -14,7 +14,24 @@ export interface HandlerContext {
   relay: RelayAdapter;
   store: ConversationStore;
   transcriber: Transcriber;
+  /** Patient session tokens by platform user id (memory only; never persisted). */
+  patientTokens: Map<string, string>;
   log: (message: string) => void;
+}
+
+/**
+ * Resolve the Core client scoped to this patient: cases created with it belong
+ * to the authenticated identity. Amyna's session = the identity binding; a
+ * typed patient ID is never a credential (task 19).
+ */
+export async function patientScope(ctx: HandlerContext, from: string): Promise<CoreApi> {
+  let token = ctx.patientTokens.get(from);
+  if (!token) {
+    const session = await ctx.core.startAuthSession({ subject: `relay:${from}` });
+    token = session.patient_token;
+    ctx.patientTokens.set(from, token);
+  }
+  return ctx.core.withPatientToken(token);
 }
 
 export async function say(

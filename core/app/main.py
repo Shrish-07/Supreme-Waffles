@@ -24,6 +24,7 @@ from .routers import (
     disputes,
     health,
     human,
+    identity,
     relay_webhook,
     tools,
     visits,
@@ -53,6 +54,7 @@ TAGS = [
     {"name": "voice", "description": "Insurer calls (Core owns the session)"},
     {"name": "relay", "description": "Signed events from the Relay service"},
     {"name": "assistant", "description": "Stateless natural-language understanding"},
+    {"name": "auth", "description": "Patient sessions and identity binding"},
     {"name": "internal-tools", "description": "Agent + voice tools (scoped service tokens)"},
     {"name": "health", "description": "Liveness and configured modes"},
 ]
@@ -112,6 +114,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         relay_webhook,
         tools,
         assistant,
+        identity,
     ):
         app.include_router(module.router)
     return app

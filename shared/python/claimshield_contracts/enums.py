@@ -204,6 +204,13 @@ class CallSpeaker(StrEnum):
     HUMAN = "human"
 
 
+class LinkStatus(StrEnum):
+    """Lifecycle of a user's link to a FinchNode health-record identity."""
+
+    LINKED = "linked"
+    REVOKED = "revoked"
+
+
 class CallMergePhase(StrEnum):
     """First-class lifecycle of the immediate human merge on a paused call (17A).
 

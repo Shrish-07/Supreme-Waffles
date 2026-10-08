@@ -296,3 +296,25 @@ class AssistantExplainIn(InputModel):
 class AssistantTermExplanation(ContractModel):
     term: str
     plain_language: str
+
+
+# --------------------------------------------------------------------- identity
+
+
+class AuthSessionCreate(InputModel):
+    """Start an Amyna session for a verified identity subject.
+
+    In dev/test/staging this issues a demo session (synthetic identities only).
+    In production this endpoint is disabled: the identity provider (e.g. the
+    Relay platform's verified user) must supply the Amyna-issued session token.
+    """
+
+    subject: str = Field(min_length=3, max_length=120)
+    display_name: str | None = Field(default=None, max_length=120)
+
+
+class AuthSessionResult(ContractModel):
+    user_id: str
+    patient_token: str = Field(
+        description="Opaque bearer token; Core stores only its hash. Not PHI."
+    )

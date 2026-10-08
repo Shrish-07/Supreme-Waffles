@@ -35,6 +35,7 @@ from .enums import (
     InterventionStatus,
     IssueType,
     LineMatchStatus,
+    LinkStatus,
     MatchMethod,
     NotificationKind,
     PatientAnswer,
@@ -362,6 +363,30 @@ class Dispute(ContractModel):
     patient_authorization_id: str | None = None
     rejected_reason: str | None = None
     created_at: datetime
+
+
+# --------------------------------------------------------------------- identity
+
+
+class UserAccount(ContractModel):
+    """An authenticated Amyna account. Cases belong to users, not to typed IDs."""
+
+    user_id: str
+    auth_subject: str
+    display_name: str | None = None
+    created_at: datetime
+
+
+class FinchLink(ContractModel):
+    """A user's authorized connection to a FinchNode patient identity (§5)."""
+
+    link_id: str
+    user_id: str
+    finchnode_patient_id: str  # an identifier, never a credential
+    status: LinkStatus
+    created_at: datetime
+    revoked_at: datetime | None = None
+
     approved_at: datetime | None = None
 
 

@@ -21,6 +21,9 @@ ID_PREFIXES = {
     "notification": "ntf",
     "request": "req",
     "audit": "aud",
+    "user": "user",
+    "finch_link": "flink",
+    "job": "job",
 }
 
 

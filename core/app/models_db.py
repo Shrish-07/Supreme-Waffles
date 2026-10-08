@@ -19,12 +19,48 @@ def _created() -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+class UserRow(Base):
+    """Authenticated Amyna accounts. Cases belong to users (task #19)."""
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(ID, primary_key=True)
+    auth_subject: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    display_name: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = _created()
+
+
+class PatientSessionRow(Base):
+    """Opaque session tokens for patient endpoints. Only the hash is stored."""
+
+    __tablename__ = "patient_sessions"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = _created()
+
+
+class FinchLinkRow(Base):
+    """A user's authorized link to a FinchNode identity (an identifier, not a credential)."""
+
+    __tablename__ = "finch_links"
+
+    id: Mapped[str] = mapped_column(ID, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    finchnode_patient_id: Mapped[str] = mapped_column(String(80), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="linked")
+    created_at: Mapped[datetime] = _created()
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class CaseRow(Base):
     __tablename__ = "cases"
 
     id: Mapped[str] = mapped_column(ID, primary_key=True)
     state: Mapped[str] = mapped_column(String(32), index=True)
     channel: Mapped[str] = mapped_column(String(16))
+    # The owning Amyna account (None for legacy/demo cases).
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
     finchnode_patient_id: Mapped[str] = mapped_column(String(80), index=True)
     patient_display_name: Mapped[str | None] = mapped_column(String(200))
     member_ref: Mapped[str | None] = mapped_column(String(80))

@@ -252,6 +252,54 @@
         "title": "AssistantUnderstandResult",
         "type": "object"
       },
+      "AuthSessionCreate": {
+        "additionalProperties": false,
+        "description": "Start an Amyna session for a verified identity subject.\n\nIn dev/test/staging this issues a demo session (synthetic identities only).\nIn production this endpoint is disabled: the identity provider (e.g. the\nRelay platform's verified user) must supply the Amyna-issued session token.",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "subject": {
+            "maxLength": 120,
+            "minLength": 3,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "title": "AuthSessionCreate",
+        "type": "object"
+      },
+      "AuthSessionResult": {
+        "properties": {
+          "patient_token": {
+            "description": "Opaque bearer token; Core stores only its hash. Not PHI.",
+            "title": "Patient Token",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "patient_token"
+        ],
+        "title": "AuthSessionResult",
+        "type": "object"
+      },
       "CallMergePhase": {
         "description": "First-class lifecycle of the immediate human merge on a paused call (17A).\n\nSENSITIVE_REQUEST_DETECTED -> PATIENT_BEING_CONNECTED -> PATIENT_CONNECTED\n-> PATIENT_HANDLING_VERIFICATION -> PATIENT_RELEASED -> AI_RESUMING.\nMERGE_FAILED is the explicit failure escape (the AI is never auto-resumed).",
         "enum": [
@@ -1309,18 +1357,6 @@
       },
       "Dispute": {
         "properties": {
-          "approved_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Approved At"
-          },
           "case_id": {
             "title": "Case Id",
             "type": "string"
@@ -4682,6 +4718,48 @@
         ]
       }
     },
+    "/auth/session": {
+      "post": {
+        "description": "Issue an opaque session token (demo environments; disabled in prod).",
+        "operationId": "start_session_auth_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthSessionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/cases": {
       "post": {
         "operationId": "create_case_cases_post",
@@ -6895,6 +6973,10 @@
     {
       "description": "Stateless natural-language understanding",
       "name": "assistant"
+    },
+    {
+      "description": "Patient sessions and identity binding",
+      "name": "auth"
     },
     {
       "description": "Agent + voice tools (scoped service tokens)",
