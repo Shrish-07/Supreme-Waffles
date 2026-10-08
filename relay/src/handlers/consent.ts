@@ -1,7 +1,7 @@
 /** Health-data consent (required before Core reads FinchNode records). */
 import { BUTTONS, DATA_CONSENT_TEXT, copy } from "../ux/messages";
 import type { Conversation } from "../store";
-import { offerRecording } from "./appointmentRecording";
+import { answerRecordingChoice, offerRecording } from "./appointmentRecording";
 import { type HandlerContext, requireCase, say } from "./context";
 
 export async function askDataConsent(ctx: HandlerContext, convo: Conversation): Promise<void> {
@@ -20,6 +20,11 @@ export async function answerDataConsent(
       consent_text: DATA_CONSENT_TEXT,
       channel: "relay",
     });
+    if (convo.wantRecording) {
+      convo.wantRecording = false;
+      await answerRecordingChoice(ctx, convo, BUTTONS.recordYes.id);
+      return;
+    }
     await offerRecording(ctx, convo);
     return;
   }

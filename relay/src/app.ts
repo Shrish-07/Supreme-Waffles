@@ -11,6 +11,7 @@ import { onCoreNotify, type CoreNotifyPayload } from "./handlers/humanHandoff";
 import { LiveTranscriber, MockTranscriber } from "./handlers/transcription";
 import { LiveRelayAdapter } from "./relayAdapter/live";
 import { MockRelayAdapter } from "./relayAdapter/mock";
+import { findNearbyHospital } from "./places/hospitals";
 import { ConversationStore } from "./store";
 import {
   EventLedger,
@@ -27,6 +28,7 @@ export function createContext(config: RelayConfig, overrides: Partial<HandlerCon
     relay,
     store: new ConversationStore(join(config.dataDir, "conversations.json")),
     transcriber: relay.simulatesRecording ? new MockTranscriber() : new LiveTranscriber(config.xaiApiKey, config.xaiSttUrl),
+    findHospital: findNearbyHospital,
     log: (message) => console.log(`[relay] ${message}`),
     ...overrides,
   };

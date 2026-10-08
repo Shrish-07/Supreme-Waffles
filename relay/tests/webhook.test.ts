@@ -90,6 +90,33 @@ describe("parsePlatformEvent", () => {
     expect(parsePlatformEvent(envelope("chat.typing_indicator.started")).kind).toBe("ignored");
     expect(() => parsePlatformEvent({ event_type: "message.received" })).toThrow(/event_id/);
   });
+
+  it("reads a dropped pin and a live location share", () => {
+    expect(
+      parsePlatformEvent({
+        event_type: "message.received",
+        event_id: "evt_pin",
+        data: {
+          direction: "inbound",
+          chat_id: "chat_1",
+          sender_handle: { handle: "ira" },
+          parts: [{ type: "place", latitude: 37.76, longitude: -122.45, address: "1001 Potrero Ave" }],
+        },
+      }),
+    ).toMatchObject({
+      kind: "message",
+      from: "ira",
+      chatId: "chat_1",
+      place: { latitude: 37.76, longitude: -122.45 },
+    });
+    expect(
+      parsePlatformEvent({
+        event_type: "location.sharing.started",
+        event_id: "evt_live",
+        data: { chat_id: "chat_1", sender_handle: { handle: "ira" } },
+      }),
+    ).toMatchObject({ kind: "location_share", from: "ira", chatId: "chat_1", locationShare: "live" });
+  });
 });
 
 describe("EventLedger", () => {

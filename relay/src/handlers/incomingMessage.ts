@@ -12,6 +12,12 @@ import {
 import { answerOpenPrompt, captureClaimId, replyToNotification, reviewBill } from "./approvalFlow";
 import { answerDataConsent, askDataConsent } from "./consent";
 import { type HandlerContext, say, serialize } from "./context";
+import {
+  askForLocation,
+  handleLocationEvent,
+  rememberChat,
+  startRecordingFromHospital,
+} from "./hospitalCheckin";
 
 const PATIENT_ID = /\b(?:fn_pat_[A-Za-z0-9_]+|patient-[A-Za-z0-9_-]+|u_[A-Za-z0-9]+)\b/i;
 const LOOSE_PATIENT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{3,80}$/;
@@ -57,6 +63,7 @@ async function openCase(
 async function start(ctx: HandlerContext, convo: Conversation): Promise<void> {
   if (convo.finchnodePatientId) {
     await say(ctx, convo, copy.welcomeBack(convo.finchnodePatientId));
+    await askForLocation(ctx, convo);
     await openCase(ctx, convo, convo.finchnodePatientId);
     return;
   }
@@ -75,7 +82,10 @@ async function capturePatientId(
     return;
   }
   const firstTime = !convo.finchnodePatientId;
-  if (firstTime) await say(ctx, convo, copy.accountSaved(patientId));
+  if (firstTime) {
+    await say(ctx, convo, copy.accountSaved(patientId));
+    await askForLocation(ctx, convo);
+  }
   await openCase(ctx, convo, patientId);
 }
 
@@ -102,6 +112,7 @@ export function handleIncoming(ctx: HandlerContext, event: InboundEvent): Promis
 
 async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
   let convo = ctx.store.get(event.from);
+  rememberChat(convo, event.chatId);
   const command = event.text?.trim().toLowerCase();
   if (command === "switch") {
     convo = ctx.store.clearAccount(event.from);
@@ -114,6 +125,7 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
     await start(ctx, convo);
     return;
   }
+  if (await handleLocationEvent(ctx, convo, event)) return;
   if (event.kind === "recording") {
     await onRecordingCompleted(ctx, convo, event.recordingUrl);
     return;
@@ -141,6 +153,9 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
     case "awaiting_data_consent":
       return await answerDataConsent(ctx, convo, choice);
     case "awaiting_recording_choice":
+      if ((choice === BUTTONS.recordYes.id || choice === "YES") && !convo.caseId) {
+        return await startRecordingFromHospital(ctx, convo);
+      }
       return await answerRecordingChoice(ctx, convo, choice);
     case "recording":
       return await awaitVoiceMemo(ctx, convo, choice);
@@ -148,6 +163,9 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
       if (await checkVisitEvidence(ctx, convo)) return;
       return await say(ctx, convo, copy.stillProcessingVisit);
     case "ready_for_bill":
+      if (choice === BUTTONS.recordYes.id) {
+        return await answerRecordingChoice(ctx, convo, choice);
+      }
       if (choice === BUTTONS.reviewBill.id || /review|bill/i.test(event.text ?? "")) {
         return await reviewBill(ctx, convo);
       }

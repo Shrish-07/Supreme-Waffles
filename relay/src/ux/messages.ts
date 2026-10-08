@@ -29,10 +29,10 @@ export const HANDOFF_BUTTONS: Button[] = [BUTTONS.done, BUTTONS.cancel];
 
 /** Must be >= 10 chars; stored verbatim as the consent text in Core. */
 export const DATA_CONSENT_TEXT =
-  "I allow ClaimShield to read my FinchNode health records (encounters, procedures, " +
+  "I allow Amyna to read my FinchNode health records (encounters, procedures, " +
   "medications and claims) to review this bill.";
 export const RECORDING_CONSENT_TEXT =
-  "I agree that ClaimShield may record and transcribe this appointment for my bill review.";
+  "I agree that Amyna may record and transcribe this appointment for my bill review.";
 
 /** The extractor marks ruled-out services as "NOT anesthesia"; patients read "no anesthesia". */
 function describeEvidence(item: { description: string; negated?: boolean }): string {
@@ -47,7 +47,7 @@ export function listItems(items: string[]): string {
 
 export const copy = {
   welcome:
-    "Hi! I'm ClaimShield. I compare your medical bills with your health records and visit " +
+    "Hi! I'm Amyna. I compare your medical bills with your health records and visit " +
     "recordings, flag possible billing errors, and help you dispute them.\n\n" +
     "Quick setup (once): send your FinchNode patient ID. I'll save it for this chat and " +
     "connect to FinchNode as you from now on.",
@@ -55,6 +55,18 @@ export const copy = {
     `You're set. I'll use FinchNode patient ${patientId} for this chat. Send "switch" later if that's the wrong person.`,
   welcomeBack: (patientId: string) =>
     `Welcome back. I'll connect to FinchNode as ${patientId}. Send "switch" if that's the wrong person.`,
+  locationAsk:
+    "Share your location in this chat (Once is fine, or keep sharing while you're at the appointment) " +
+    "and I'll ping you if it looks like you're at a hospital so you can record the visit. " +
+    'You can also send "I\'m at the hospital".',
+  nearHospital: (name: string): OutboundMessage => ({
+    text: `Looks like you're at ${name}. Want to start recording this visit so I can check the bill later?`,
+    buttons: [BUTTONS.recordYes, BUTTONS.recordSkip],
+  }),
+  notNearHospital:
+    "Thanks. That doesn't look like a hospital or clinic, so I won't start a recording. Share again when you arrive.",
+  hospitalNeedsId:
+    "Looks like you're at a hospital. Send your FinchNode patient ID first and I'll start the recording.",
   dataConsent: (): OutboundMessage => ({
     text: `To review your bills I need your permission:\n\n"${DATA_CONSENT_TEXT}"`,
     buttons: [BUTTONS.consentYes, BUTTONS.consentNo],
@@ -84,14 +96,21 @@ export const copy = {
   }),
   audioNotExpected:
     "Thanks, but I only use recordings right after you tap Record my visit. Send \"restart\" to start over.",
-  visitNotes: (evidence: { description: string; negated?: boolean }[]): OutboundMessage => ({
-    text:
-      (evidence.length
-        ? `Here's what I noted from your visit: ${listItems(evidence.map(describeEvidence))}.`
-        : "I went through your visit but didn't hear any procedures, tests or medications to check your bill against.") +
-      "\n\nWhen your bill arrives, tap Review my bill and I'll compare it with your visit.",
-    buttons: [BUTTONS.reviewBill],
-  }),
+  visitNotes: (
+    evidence: { description: string; negated?: boolean }[],
+    heard?: string,
+  ): OutboundMessage => {
+    const noted = evidence.length
+      ? `Here's what I noted from your visit: ${listItems(evidence.map(describeEvidence))}.`
+      : "I went through your visit but didn't match a billed procedure or medication yet.";
+    const quote = heard?.trim()
+      ? `\n\nFrom the recording: "${heard.trim().replace(/\s+/g, " ").slice(0, 280)}${heard.trim().length > 280 ? "…" : ""}"`
+      : "";
+    return {
+      text: `${noted}${quote}\n\nWhen your bill arrives, tap Review my bill and I'll compare it with this visit.`,
+      buttons: [BUTTONS.reviewBill],
+    };
+  },
   readyForBill: (): OutboundMessage => ({
     text: "Tap Review my bill when you're ready.",
     buttons: [BUTTONS.reviewBill],
@@ -99,6 +118,8 @@ export const copy = {
   reviewing: "Reviewing your bill against your records and visit recording...",
   restart: "Send anything to review another bill — I'll keep using your FinchNode account.",
   notUnderstood: "Sorry, I didn't catch that. Please use the buttons above.",
+  claimMissing:
+    "I couldn't find that bill for this FinchNode patient. Send claim-demo-001 (Morgan Rivera's office visit) or send restart.",
   coreRejected: (code: string) =>
     `Sorry, I couldn't do that step (${code}). Send "restart" to start over if you're stuck.`,
 };

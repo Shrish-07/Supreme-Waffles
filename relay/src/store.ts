@@ -30,6 +30,12 @@ export interface Conversation {
   recordingRef?: string;
   claimId?: string;
   reportSent?: boolean;
+  chatId?: string;
+  locationAsked?: boolean;
+  locationSharing?: boolean;
+  lastHospitalPromptAt?: number;
+  lastHospitalName?: string;
+  wantRecording?: boolean;
   /** Core notifications already shown to the patient (rendered exactly once). */
   delivered: Record<string, DeliveredNotification>;
 }
@@ -56,14 +62,17 @@ export class ConversationStore {
     return [...this.conversations.values()].find((c) => c.caseId === caseId);
   }
 
-  /** New bill review for the same person. Keeps the saved FinchNode patient ID. */
+  /** New bill review for the same person. Keeps the saved FinchNode patient ID and location. */
   reset(userId: string): Conversation {
-    const patientId = this.conversations.get(userId)?.finchnodePatientId;
+    const prev = this.conversations.get(userId);
     const fresh: Conversation = {
       userId,
       stage: "new",
       delivered: {},
-      ...(patientId ? { finchnodePatientId: patientId } : {}),
+      ...(prev?.finchnodePatientId ? { finchnodePatientId: prev.finchnodePatientId } : {}),
+      ...(prev?.chatId ? { chatId: prev.chatId } : {}),
+      ...(prev?.locationAsked ? { locationAsked: true } : {}),
+      ...(prev?.locationSharing ? { locationSharing: true } : {}),
     };
     this.conversations.set(userId, fresh);
     return fresh;

@@ -10,6 +10,11 @@ export interface OutboundMessage {
   buttons?: Button[];
 }
 
+export interface SharedLocation {
+  latitude: number;
+  longitude: number;
+}
+
 export interface RelayAdapter {
   readonly mode: "mock" | "live";
   /** True when recording is simulated: the visit "completes" at once with the synthetic demo
@@ -23,4 +28,8 @@ export interface RelayAdapter {
   fetchRecording(url: string): Promise<Uint8Array>;
   /** Map a tapped button's label back to its id (platforms that return only the label). */
   resolveButton?(from: string, text: string): string | undefined;
+  /** Native Relay "Share My Location" prompt in this one-to-one chat. */
+  requestLocation(chatId: string): Promise<"sent" | "already_sharing" | "unavailable">;
+  /** Latest live-share position, if the person is sharing in this chat. */
+  readLocation(chatId: string): Promise<SharedLocation | undefined>;
 }

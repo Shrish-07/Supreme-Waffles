@@ -107,7 +107,14 @@ export class StubCore implements CoreApi {
   }
 }
 
-export function setup(options: { voiceMemos?: boolean; transcriber?: Transcriber; dataDir?: string } = {}) {
+export function setup(
+  options: {
+    voiceMemos?: boolean;
+    transcriber?: Transcriber;
+    dataDir?: string;
+    findHospital?: HandlerContext["findHospital"];
+  } = {},
+) {
   const core = new StubCore();
   const relay = new MockRelayAdapter(false, !options.voiceMemos);
   const ctx: HandlerContext = {
@@ -116,6 +123,7 @@ export function setup(options: { voiceMemos?: boolean; transcriber?: Transcriber
     relay,
     store: new ConversationStore(),
     transcriber: options.transcriber ?? new MockTranscriber(),
+    findHospital: options.findHospital ?? (async () => undefined),
     log: () => undefined,
   };
   let counter = 0;
