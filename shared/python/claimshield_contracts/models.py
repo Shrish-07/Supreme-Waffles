@@ -16,6 +16,7 @@ from .enums import (
     Actor,
     AgentName,
     AgentRunStatus,
+    CallMergePhase,
     CallSpeaker,
     CallStatus,
     CaseState,
@@ -389,6 +390,8 @@ class CallSession(ContractModel):
     case_id: str
     dispute_id: str
     status: CallStatus
+    # First-class 17A human-merge lifecycle (None until a sensitive request).
+    merge_phase: CallMergePhase | None = None
     provider_call_ref: str | None = None
     to_number_masked: str | None = None
     turns: list[CallTurn] = Field(default_factory=list)

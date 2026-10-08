@@ -239,6 +239,10 @@ class CallRow(Base):
     provider_call_ref: Mapped[str | None] = mapped_column(String(120))
     # The dialed-and-bridged human leg of a paused call (None when no merge).
     human_call_ref: Mapped[str | None] = mapped_column(String(120))
+    # First-class 17A human-merge lifecycle phase (None until a sensitive request).
+    merge_phase: Mapped[str | None] = mapped_column(String(32))
+    # While PATIENT_BEING_CONNECTED: the safe deadline for the human to answer.
+    merge_deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     to_number_masked: Mapped[str | None] = mapped_column(String(32))
     turns: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     insurer_response: Mapped[dict[str, Any] | None] = mapped_column(JSON)

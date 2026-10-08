@@ -12,6 +12,7 @@ synchronous mock session and the threaded live session.
 """
 
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
@@ -19,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from claimshield_contracts.api import VoiceEventIn, VoiceEventResult
 from claimshield_contracts.enums import (
+    CallMergePhase,
     CallSpeaker,
     CallStatus,
     CaseState,
@@ -44,7 +46,7 @@ from ..adapters.xai_voice.dispatcher import ToolCallDispatcher
 from ..adapters.xai_voice.prompts import VOICE_TOOL_SCHEMAS, build_instructions
 from ..audit import mask_phone, record_audit
 from ..auth import identity_for
-from ..db import utcnow
+from ..db import as_utc, utcnow
 from ..errors import Conflict, DomainError, InvalidInput, NotFound, SafetyBlocked, UpstreamError
 from ..models_db import CallRow, CaseRow, InterventionRow
 from . import notification_service
@@ -237,6 +239,10 @@ class VoiceCallManager:
                 return
             human_ref = call.human_call_ref
             call.human_call_ref = None
+            call.merge_deadline_at = None
+            # 17A: the AI resumes ONLY after this explicit transition -- and only
+            # once the human leg is being safely removed.
+            call.merge_phase = CallMergePhase.PATIENT_RELEASED.value
             if human_ref:
                 _append_turn(call, CallSpeaker.SYSTEM, "The human left the call.")
             case = get_case_row(db, call.case_id)
@@ -248,12 +254,17 @@ class VoiceCallManager:
             transition(db, case, CaseState.CALL_IN_PROGRESS, actor=actor)
         if human_ref:
             self._quiet_hangup(human_ref)
+        with self._c.session_scope() as db:
+            _get_call(db, call_id).merge_phase = CallMergePhase.AI_RESUMING.value
         try:
             self._c.voice.resume_session(call_id, self)
         except Exception as exc:
             log.exception("voice session could not resume", extra={"fields": {"call_id": call_id}})
             self._end(call_id, f"voice session lost: {type(exc).__name__}", failed=True)
             raise UpstreamError("The call could not be resumed and was closed.") from exc
+        with self._c.session_scope() as db:
+            # AI_CALLING: the merge lifecycle is complete.
+            _get_call(db, call_id).merge_phase = None
 
     def cancel_after_human(self, call_id: str, *, actor: str) -> None:
         """Called after a call-linked intervention resolves with CANCEL."""
@@ -262,6 +273,9 @@ class VoiceCallManager:
             ref = call_row.provider_call_ref
             human_ref = call_row.human_call_ref
             call_row.human_call_ref = None
+            call_row.merge_deadline_at = None
+            if call_row.merge_phase is not None:
+                call_row.merge_phase = CallMergePhase.PATIENT_RELEASED.value
         try:
             self._c.voice.end_session(call_id, "cancelled by patient")
         except Exception:
@@ -381,29 +395,113 @@ class VoiceCallManager:
         self._end(call_id, reason, failed=False)
 
     def _maybe_dial_human(self, call_id: str, insurer_ref: str | None) -> None:
-        """Merge the human into the paused call: dial HUMAN_HANDOFF_PHONE as a
-        second leg. Live telephony bridges them on the human's call.answered
-        webhook; the mock answers instantly. Never breaks the handoff: any
-        failure leaves the proven pause-only flow."""
+        """17A: immediately connect the patient to the SAME live insurer call.
+
+        Pause AI output (done by _pause_for_human), preserve the insurer
+        connection, and dial HUMAN_HANDOFF_PHONE as a second leg. Live telephony
+        bridges them on the human's call.answered webhook; the mock answers
+        instantly. ``merge_phase`` tracks the first-class lifecycle; the call is
+        paused and the AI stays silent the whole time. Idempotent: a duplicate
+        sensitive request while already dials/connected does nothing extra
+        (``call.status`` is no longer IN_PROGRESS, so no re-dial happens).
+        A dial failure escalates to MERGE_FAILED -- never a silent fallback and
+        never an automatic resume.
+        """
         number = self._c.settings.human_handoff_phone
         if not number or not insurer_ref:
             return
+        deadline = utcnow() + timedelta(seconds=self._c.settings.human_merge_timeout_s)
+        with self._c.session_scope() as db:
+            call = _get_call(db, call_id)
+            if call.human_call_ref or call.merge_phase in (
+                CallMergePhase.MERGE_FAILED.value,
+                CallMergePhase.PATIENT_BEING_CONNECTED.value,
+                CallMergePhase.PATIENT_CONNECTED.value,
+                CallMergePhase.PATIENT_HANDLING_VERIFICATION.value,
+            ):
+                return  # idempotent: a human leg already exists or is in flight
+            call.merge_phase = CallMergePhase.PATIENT_BEING_CONNECTED.value
+            call.merge_deadline_at = deadline
         try:
             result = self._c.telephony.dial_human(call_id, number, insurer_ref)
         except Exception:
             log.exception(
-                "human merge dial failed; the call stays paused-only",
+                "human merge dial failed",
                 extra={"fields": {"call_id": call_id}},
             )
+            self._mark_merge_failed(call_id, "the human merge call could not be placed")
             return
         if result is None:  # adapter does not support a parallel human leg
+            with self._c.session_scope() as db:
+                call = _get_call(db, call_id)
+                call.merge_phase = CallMergePhase.SENSITIVE_REQUEST_DETECTED.value
+                call.merge_deadline_at = None
             return
         with self._c.session_scope() as db:
             call = _get_call(db, call_id)
             call.human_call_ref = result.provider_call_ref
+            if result.status == "answered":
+                call.merge_phase = CallMergePhase.PATIENT_CONNECTED.value
+                call.merge_deadline_at = None
             _append_turn(
-                call, CallSpeaker.SYSTEM, f"Dialed a human into the call ({mask_phone(number)})."
+                call,
+                CallSpeaker.SYSTEM,
+                f"Connecting you to the representative ({mask_phone(number)}).",
             )
+
+    def _mark_merge_failed(self, call_id: str, detail: str) -> None:
+        """Explicit failure state: keep the AI paused, notify the patient, never
+        auto-resume. The insurer leg stays alive within policy; the patient (or
+        an operator) must act explicitly to continue or end the call."""
+        with self._c.session_scope() as db:
+            call = _get_call(db, call_id)
+            if call.merge_phase == CallMergePhase.MERGE_FAILED.value:
+                return  # idempotent
+            call.merge_phase = CallMergePhase.MERGE_FAILED.value
+            call.merge_deadline_at = None
+            _append_turn(call, CallSpeaker.SYSTEM, f"Could not connect the patient: {detail}.")
+            case = get_case_row(db, call.case_id)
+            record_audit(
+                db,
+                actor="core:voice",
+                action="voice.merge_failed",
+                case_id=case.id,
+                resource_id=call.id,
+                details={"detail": detail},
+            )
+            notification_service.notify_status(
+                db,
+                self._c,
+                case,
+                "I couldn't reach your phone number to connect you to the call. "
+                "The insurer is still on the line. Please check that your phone can "
+                "receive calls, then tell me when you're ready and I'll try again.",
+            )
+
+    def expire_overdue_merges(self, *, now=None) -> int:
+        """Called by the jobs worker: time out a stale PATIENT_BEING_CONNECTED.
+
+        Only the unreachable-patient path expires; a failed merge already has an
+        explicit MERGE_FAILED state. Returns the number of merges escalated.
+        """
+        count = 0
+        with self._c.session_scope() as db:
+            from sqlalchemy import select
+
+            stmt = (
+                select(CallRow)
+                .where(CallRow.status == CallStatus.PAUSED_FOR_HUMAN.value)
+                .where(CallRow.merge_phase == CallMergePhase.PATIENT_BEING_CONNECTED.value)
+            )
+            calls = list(db.scalars(stmt))
+        for call in calls:
+            if call.merge_deadline_at is None:
+                continue
+            deadline = as_utc(call.merge_deadline_at)
+            if deadline <= as_utc(now or utcnow()):
+                self._mark_merge_failed(call.id, "the patient did not answer in time")
+                count += 1
+        return count
 
     # ------------------------------------------------------------------ internals
 
@@ -422,6 +520,9 @@ class VoiceCallManager:
         )
         call.status = CallStatus.PAUSED_FOR_HUMAN.value
         call.open_intervention_id = row.id
+        # 17A first-class state: the immediate human merge begins here.
+        if call.merge_phase != CallMergePhase.MERGE_FAILED.value:
+            call.merge_phase = CallMergePhase.SENSITIVE_REQUEST_DETECTED.value
         _append_turn(call, CallSpeaker.SYSTEM, f"Paused for human: {reason.value}")
         transition(db, case, CaseState.HUMAN_REQUIRED, actor=actor)
         notification_service.notify_handoff(db, self._c, case, row)

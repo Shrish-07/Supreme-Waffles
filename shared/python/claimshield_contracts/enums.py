@@ -204,6 +204,23 @@ class CallSpeaker(StrEnum):
     HUMAN = "human"
 
 
+class CallMergePhase(StrEnum):
+    """First-class lifecycle of the immediate human merge on a paused call (17A).
+
+    SENSITIVE_REQUEST_DETECTED -> PATIENT_BEING_CONNECTED -> PATIENT_CONNECTED
+    -> PATIENT_HANDLING_VERIFICATION -> PATIENT_RELEASED -> AI_RESUMING.
+    MERGE_FAILED is the explicit failure escape (the AI is never auto-resumed).
+    """
+
+    SENSITIVE_REQUEST_DETECTED = "sensitive_request_detected"
+    PATIENT_BEING_CONNECTED = "patient_being_connected"
+    PATIENT_CONNECTED = "patient_connected_with_human"
+    PATIENT_HANDLING_VERIFICATION = "patient_handling_verification"
+    PATIENT_RELEASED = "patient_released"
+    AI_RESUMING = "ai_resuming"
+    MERGE_FAILED = "merge_failed"
+
+
 class InsurerOutcome(StrEnum):
     CHARGES_REMOVED = "charges_removed"
     PARTIALLY_REMOVED = "partially_removed"

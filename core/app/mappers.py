@@ -267,6 +267,7 @@ def call_to_model(row: CallRow) -> CallSession:
         case_id=row.case_id,
         dispute_id=row.dispute_id,
         status=row.status,
+        merge_phase=row.merge_phase,
         provider_call_ref=row.provider_call_ref,
         to_number_masked=row.to_number_masked,
         turns=row.turns,

@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     # Human merge: a handoff (SSN/PIN request...) dials this phone and
     # bridges the human into the call. Must also be in TELEPHONY_ALLOWED_NUMBERS.
     human_handoff_phone: str = ""
+    # Safe window for the human to answer the merge call. If the human has not
+    # connected by then, the merge escalates to MERGE_FAILED (the patient is
+    # notified, the insurer leg is kept alive per policy, and the AI is never
+    # auto-resumed after a failed patient connection).
+    human_merge_timeout_s: int = 120
     # Fallback Telnyx accounts, used in order when the primary is rejected
     # (auth/credit). Each must be a complete key + connection + number triplet.
     telnyx_api_key_2: str = ""
