@@ -17,6 +17,7 @@ from .audit import configure_logging
 from .config import Settings, get_settings
 from .container import Container, build_container
 from .errors import DomainError
+from .observability import install_request_metrics
 from .routers import (
     assistant,
     cases,
@@ -25,6 +26,7 @@ from .routers import (
     health,
     human,
     identity,
+    ops,
     relay_webhook,
     tools,
     visits,
@@ -55,6 +57,7 @@ TAGS = [
     {"name": "relay", "description": "Signed events from the Relay service"},
     {"name": "assistant", "description": "Stateless natural-language understanding"},
     {"name": "auth", "description": "Patient sessions and identity binding"},
+    {"name": "ops", "description": "Metrics and durable jobs drain"},
     {"name": "internal-tools", "description": "Agent + voice tools (scoped service tokens)"},
     {"name": "health", "description": "Liveness and configured modes"},
 ]
@@ -115,6 +118,8 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         tools,
         assistant,
         identity,
+        ops,
     ):
         app.include_router(module.router)
+    install_request_metrics(app)
     return app

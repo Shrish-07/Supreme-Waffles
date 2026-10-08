@@ -318,3 +318,22 @@ class AuthSessionResult(ContractModel):
     patient_token: str = Field(
         description="Opaque bearer token; Core stores only its hash. Not PHI."
     )
+
+
+# --------------------------------------------------------------------- ops
+
+
+class JobsDrainResult(ContractModel):
+    ran: int
+    failed: int
+
+
+class MetricsSnapshot(ContractModel):
+    """GET /internal/metrics. Counts only -- never PHI."""
+
+    requests: dict[str, int] = Field(default_factory=dict)
+    latency_avg_ms: dict[str, int] = Field(default_factory=dict)
+    queue_depth: dict[str, int] = Field(default_factory=dict)
+    active_calls: int = 0
+    open_interventions: int = 0
+    stuck_cases_24h: int = 0

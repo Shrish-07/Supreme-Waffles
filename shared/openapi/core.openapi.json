@@ -2944,6 +2944,24 @@
         "title": "IssueType",
         "type": "string"
       },
+      "JobsDrainResult": {
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "ran": {
+            "title": "Ran",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ran",
+          "failed"
+        ],
+        "title": "JobsDrainResult",
+        "type": "object"
+      },
       "LineAssessment": {
         "properties": {
           "claim_line_id": {
@@ -3017,6 +3035,49 @@
         ],
         "title": "MatchMethod",
         "type": "string"
+      },
+      "MetricsSnapshot": {
+        "description": "GET /internal/metrics. Counts only -- never PHI.",
+        "properties": {
+          "active_calls": {
+            "default": 0,
+            "title": "Active Calls",
+            "type": "integer"
+          },
+          "latency_avg_ms": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Latency Avg Ms",
+            "type": "object"
+          },
+          "open_interventions": {
+            "default": 0,
+            "title": "Open Interventions",
+            "type": "integer"
+          },
+          "queue_depth": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Queue Depth",
+            "type": "object"
+          },
+          "requests": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Requests",
+            "type": "object"
+          },
+          "stuck_cases_24h": {
+            "default": 0,
+            "title": "Stuck Cases 24H",
+            "type": "integer"
+          }
+        },
+        "title": "MetricsSnapshot",
+        "type": "object"
       },
       "NotificationButton": {
         "properties": {
@@ -5622,6 +5683,60 @@
         ]
       }
     },
+    "/internal/jobs/drain": {
+      "post": {
+        "description": "Run due durable jobs (worker tick). The 17A merge-expiry sweep rides this.",
+        "operationId": "drain_jobs_internal_jobs_drain_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobsDrainResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Drain Jobs",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/internal/metrics": {
+      "get": {
+        "description": "Liveness++: throughput, failures, queue depth, active calls, stuck cases.",
+        "operationId": "metrics_internal_metrics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Metrics",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
     "/internal/tools/find_or_create_case": {
       "post": {
         "operationId": "tool_find_or_create_case",
@@ -7105,6 +7220,10 @@
     {
       "description": "Patient sessions and identity binding",
       "name": "auth"
+    },
+    {
+      "description": "Metrics and durable jobs drain",
+      "name": "ops"
     },
     {
       "description": "Agent + voice tools (scoped service tokens)",

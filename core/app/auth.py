@@ -54,7 +54,14 @@ SCOPES: dict[ServiceName, frozenset[str]] = {
             "voice:handoff",
         }
     ),
-    ServiceName.FETCH: frozenset({"cases:read", *(tool_scope(t) for t in FETCH_TOOLS)}),
+    ServiceName.FETCH: frozenset(
+        {
+            "cases:read",
+            "jobs:run",
+            "metrics:read",
+            *(tool_scope(t) for t in FETCH_TOOLS),
+        }
+    ),
     ServiceName.VOICE: frozenset(
         {"voice:read", "voice:events", "voice:handoff", *(tool_scope(t) for t in VOICE_TOOLS)}
     ),

@@ -333,6 +333,34 @@ class AuditRow(Base):
     details: Mapped[dict[str, Any]] = mapped_column(JSON)
 
 
+class JobRow(Base):
+    """Durable jobs for long-running work (task 28).
+
+    Long operations (transcription, evidence extraction, claim analysis,
+    notifications, dispute preparation, voice-call sweeps, external API
+    retries) persist here with id, case, correlation id, state, attempt
+    count, timeout and retry policy -- so no work depends on one HTTP
+    request staying open.
+    """
+
+    __tablename__ = "jobs"
+
+    id: Mapped[str] = mapped_column(ID, primary_key=True)
+    job_type: Mapped[str] = mapped_column(String(64), index=True)
+    case_id: Mapped[str | None] = mapped_column(ID, index=True)
+    correlation_id: Mapped[str] = mapped_column(String(80), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), unique=True)
+    state: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    timeout_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created()
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class WebhookEventRow(Base):
     """Idempotency ledger for POST /relay/webhook."""
 

@@ -368,6 +368,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/jobs/drain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Drain Jobs
+         * @description Run due durable jobs (worker tick). The 17A merge-expiry sweep rides this.
+         */
+        post: operations["drain_jobs_internal_jobs_drain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Metrics
+         * @description Liveness++: throughput, failures, queue depth, active calls, stuck cases.
+         */
+        get: operations["metrics_internal_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/tools/find_or_create_case": {
         parameters: {
             query?: never;
@@ -1936,6 +1976,13 @@ export interface components {
          * @enum {string}
          */
         IssueType: "unsupported_charge" | "duplicate_charge" | "unknown_medication" | "code_mismatch" | "price_above_published";
+        /** JobsDrainResult */
+        JobsDrainResult: {
+            /** Failed */
+            failed: number;
+            /** Ran */
+            ran: number;
+        };
         /** LineAssessment */
         LineAssessment: {
             /** Claim Line Id */
@@ -1961,6 +2008,39 @@ export interface components {
          * @enum {string}
          */
         MatchMethod: "source_record" | "exact" | "alias" | "fuzzy";
+        /**
+         * MetricsSnapshot
+         * @description GET /internal/metrics. Counts only -- never PHI.
+         */
+        MetricsSnapshot: {
+            /**
+             * Active Calls
+             * @default 0
+             */
+            active_calls?: number;
+            /** Latency Avg Ms */
+            latency_avg_ms?: {
+                [key: string]: number;
+            };
+            /**
+             * Open Interventions
+             * @default 0
+             */
+            open_interventions?: number;
+            /** Queue Depth */
+            queue_depth?: {
+                [key: string]: number;
+            };
+            /** Requests */
+            requests?: {
+                [key: string]: number;
+            };
+            /**
+             * Stuck Cases 24H
+             * @default 0
+             */
+            stuck_cases_24h?: number;
+        };
         /** NotificationButton */
         NotificationButton: {
             /** Id */
@@ -3112,6 +3192,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    drain_jobs_internal_jobs_drain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsDrainResult"];
+                };
+            };
+        };
+    };
+    metrics_internal_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricsSnapshot"];
                 };
             };
         };
