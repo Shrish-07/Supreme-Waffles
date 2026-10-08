@@ -6188,7 +6188,7 @@
     },
     "/relay/webhook": {
       "post": {
-        "description": "Signed, idempotent patient event from the Relay service.\n\nHeaders: ``X-ClaimShield-Timestamp`` (unix seconds) and\n``X-ClaimShield-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, \"{ts}.{raw body}\")>``.",
+        "description": "Signed, idempotent patient event from the Relay service.\n\nHeaders: ``X-Amyna-Timestamp`` (unix seconds) and\n``X-Amyna-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, \"{ts}.{raw body}\")>``.",
         "operationId": "relay_webhook_relay_webhook_post",
         "requestBody": {
           "content": {

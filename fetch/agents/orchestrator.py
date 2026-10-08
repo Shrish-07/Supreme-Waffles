@@ -87,7 +87,7 @@ def build_orchestrator(
     """Build the public orchestrator. Offline runs pass mailbox/publish False + agentverse."""
     settings = settings or AgentSettings.from_env()
     agent = Agent(
-        name="claimshield-orchestrator",
+        name="amyna-orchestrator",
         seed=require_seed("ORCHESTRATOR_SEED"),
         port=PORT,
         mailbox=mailbox,

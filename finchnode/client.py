@@ -38,6 +38,9 @@ RESOURCE_FILES = {
 }
 # Public fake demo. No account, no API key.
 DEMO_BASE_URL = "https://api.finchnode.com/demo/v1"
+# Patient-authorized records API. Production keys are issued once the FinchNode
+# account's application is complete and enabled by its owner (finchnode.com/docs).
+PRODUCTION_BASE_URL = "https://api.finchnode.com/api/v1"
 SANDBOX_KEY_PREFIX = "ck_test_"
 
 
@@ -94,8 +97,8 @@ class HttpFinchNodeClient:
         retries: int = 2,
         backoff_s: float = 0.5,
     ) -> None:
-        if mode not in ("demo", "sandbox"):
-            raise ValueError(f"HttpFinchNodeClient supports demo|sandbox, not {mode!r}")
+        if mode not in ("demo", "sandbox", "production"):
+            raise ValueError(f"HttpFinchNodeClient supports demo|sandbox|production, not {mode!r}")
         if mode == "demo":
             if api_key:
                 raise ValueError(
@@ -103,6 +106,15 @@ class HttpFinchNodeClient:
                     "Unset FINCHNODE_API_KEY."
                 )
             base_url = base_url or DEMO_BASE_URL
+        elif mode == "production":
+            if not api_key:
+                raise ValueError("FINCHNODE_MODE=production requires FINCHNODE_API_KEY")
+            if api_key.startswith(SANDBOX_KEY_PREFIX):
+                raise ValueError(
+                    "A sandbox key cannot be used for production records; "
+                    "use the production key from the FinchNode account."
+                )
+            base_url = base_url or PRODUCTION_BASE_URL
         elif not base_url:
             raise ValueError(f"FINCHNODE_MODE={mode} requires FINCHNODE_BASE_URL")
         if mode == "sandbox":
@@ -113,7 +125,7 @@ class HttpFinchNodeClient:
                     f"Sandbox keys start with {SANDBOX_KEY_PREFIX!r}; refusing a non-sandbox key."
                 )
         headers = {"Accept": "application/fhir+json, application/json"}
-        if mode == "sandbox" and api_key:
+        if mode in ("sandbox", "production") and api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         self._http = http or httpx.Client(base_url=base_url.rstrip("/"), timeout=10.0)
         self._http.headers.update(headers)

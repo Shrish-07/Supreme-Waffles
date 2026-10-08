@@ -32,7 +32,7 @@ make agents-hello          # HELLO_WORLD=1, orchestrator only, port 8000, mailbo
 
 1. The log prints an **Agent inspector** link. Open it, click **Connect** → **Mailbox**.
    (VERIFY against current docs: exact inspector/mailbox UI flow.)
-2. In Agentverse → *My agents*, open `claimshield-orchestrator`. The README tab should
+2. In Agentverse → *My agents*, open `amyna-orchestrator`. The README tab should
    show `fetch/agentverse/agent_profiles/orchestrator.md` (published via `readme_path`) and the
    chat protocol manifest (`publish_manifest=True`).
 3. Optionally set a handle: `ORCHESTRATOR_HANDLE=Amyna` (VERIFY handle rules).

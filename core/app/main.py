@@ -86,7 +86,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     @app.middleware("http")
     async def _contracts_header(request: Request, call_next):  # type: ignore[no-untyped-def]
         response = await call_next(request)
-        response.headers["X-ClaimShield-Contracts-Version"] = CONTRACTS_VERSION
+        response.headers["X-Amyna-Contracts-Version"] = CONTRACTS_VERSION
         return response
 
     for module in (health, cases, visits, claims, disputes, human, voice, relay_webhook, tools):

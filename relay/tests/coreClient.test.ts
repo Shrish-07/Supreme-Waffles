@@ -41,8 +41,8 @@ describe("CoreClient", () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
     expect(url).toBe("http://core/relay/webhook");
-    expect(headers["X-ClaimShield-Signature"]).toBe(
-      signCoreEvent("secret", headers["X-ClaimShield-Timestamp"]!, init.body as string),
+    expect(headers["X-Amyna-Signature"]).toBe(
+      signCoreEvent("secret", headers["X-Amyna-Timestamp"]!, init.body as string),
     );
   });
 });

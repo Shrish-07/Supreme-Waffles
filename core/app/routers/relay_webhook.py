@@ -19,8 +19,8 @@ async def relay_webhook(
 ) -> RelayWebhookResult:
     """Signed, idempotent patient event from the Relay service.
 
-    Headers: ``X-ClaimShield-Timestamp`` (unix seconds) and
-    ``X-ClaimShield-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "{ts}.{raw body}")>``.
+    Headers: ``X-Amyna-Timestamp`` (unix seconds) and
+    ``X-Amyna-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "{ts}.{raw body}")>``.
     """
     try:
         verify_signature(

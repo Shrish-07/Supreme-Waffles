@@ -48,7 +48,7 @@ log = logging.getLogger("claimshield.telephony.telnyx")
 
 TELNYX_API = "https://api.telnyx.com/v2"
 WEBHOOK_PATH = "/voice/telnyx/webhook"
-CALL_ID_SIP_HEADER = "X-ClaimShield-Call-Id"  # VERIFY: custom SIP header on transfer
+CALL_ID_SIP_HEADER = "X-Amyna-Call-Id"  # VERIFY: custom SIP header on transfer
 
 
 def to_client_state(call_id: str) -> str:

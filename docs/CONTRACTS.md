@@ -15,7 +15,7 @@ Generated artifacts: `shared/openapi/core.openapi.json` (`make openapi`) and
 | `version.py` | `CONTRACTS_VERSION`, `AGENT_PROTOCOL_VERSION` |
 
 Conventions: money = integer cents; ids = prefixed strings (`case_…`, `fnd_…`, `hin_…`);
-timestamps = ISO-8601 UTC; every response carries `X-ClaimShield-Contracts-Version`.
+timestamps = ISO-8601 UTC; every response carries `X-Amyna-Contracts-Version`.
 
 ## 1. Authentication
 
@@ -134,8 +134,8 @@ All are idempotent: they return already-recorded evidence, findings or disputes 
 ## 6. Signed Relay events (`POST /relay/webhook`)
 
 ```
-X-ClaimShield-Timestamp: <unix seconds>
-X-ClaimShield-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "<timestamp>.<raw body>")>
+X-Amyna-Timestamp: <unix seconds>
+X-Amyna-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "<timestamp>.<raw body>")>
 ```
 
 Requests more than 300 s old are rejected. `event_id` is processed at most once (a duplicate

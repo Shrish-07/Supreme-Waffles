@@ -678,8 +678,8 @@ export interface paths {
          * Relay Webhook
          * @description Signed, idempotent patient event from the Relay service.
          *
-         *     Headers: ``X-ClaimShield-Timestamp`` (unix seconds) and
-         *     ``X-ClaimShield-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "{ts}.{raw body}")>``.
+         *     Headers: ``X-Amyna-Timestamp`` (unix seconds) and
+         *     ``X-Amyna-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "{ts}.{raw body}")>``.
          */
         post: operations["relay_webhook_relay_webhook_post"];
         delete?: never;

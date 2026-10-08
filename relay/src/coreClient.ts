@@ -104,8 +104,8 @@ export class CoreClient {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-ClaimShield-Timestamp": timestamp,
-        "X-ClaimShield-Signature": signCoreEvent(this.webhookSecret, timestamp, body),
+        "X-Amyna-Timestamp": timestamp,
+        "X-Amyna-Signature": signCoreEvent(this.webhookSecret, timestamp, body),
       },
       body,
     });

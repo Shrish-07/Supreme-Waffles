@@ -33,7 +33,7 @@
 - In `APP_ENV=dev|test`, empty tokens fall back to well-known dev tokens and Core
   logs a warning. In `APP_ENV=prod`, missing tokens are a startup error.
 - **Signed webhooks**: `POST /relay/webhook` requires
-  `X-ClaimShield-Timestamp` + `X-ClaimShield-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "{timestamp}.{raw_body}")>`.
+  `X-Amyna-Timestamp` + `X-Amyna-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "{timestamp}.{raw_body}")>`.
   Requests more than 300 s old are rejected (replay protection). Each `event_id` is
   processed once; duplicates return the stored result (idempotency).
 - The Relay service verifies Relay-platform webhooks with `RELAY_WEBHOOK_SECRET`

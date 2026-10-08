@@ -14,7 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from claimshield_contracts.enums import ServiceName
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SQLITE_PATH = REPO_ROOT / ".data" / "claimshield.db"
+DEFAULT_SQLITE_PATH = REPO_ROOT / ".data" / "amyna.db"
 
 # Well-known development credentials. Used only when APP_ENV is dev/test and
 # the real variable is empty. Mirrored in relay/src/config.ts and fetch/agents/settings.py.
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
         return value.strip() if isinstance(value, str) else value
 
     # --- core
-    app_env: Literal["dev", "test", "prod"] = "dev"
+    app_env: Literal["dev", "test", "staging", "prod"] = "dev"
     log_level: str = "INFO"
     database_url: str = ""
     core_base_url: str = "http://localhost:8080"
@@ -96,7 +96,10 @@ class Settings(BaseSettings):
     orchestrator_url: str = "http://localhost:8000"
 
     # --- finchnode + intelligence
-    finchnode_mode: Literal["mock", "demo", "sandbox"] = "mock"
+    # mock => local fixtures. demo => FinchNode's public keyless fake demo API.
+    # sandbox => FinchNode sandbox (ck_test_ key). production => the real
+    # patient-authorized records API (requires an enabled FinchNode application).
+    finchnode_mode: Literal["mock", "demo", "sandbox", "production"] = "mock"
     finchnode_api_key: str = ""
     finchnode_base_url: str = ""
     extraction_mode: Literal["rules", "ollama"] = "rules"
@@ -177,13 +180,11 @@ class Settings(BaseSettings):
         def need(flag: str, *pairs: tuple[str, str]) -> None:
             missing.extend(f"{flag} requires {name}" for name, value in pairs if not value)
 
-        # demo is the public fake API and has a built-in base URL. No key.
-        if self.finchnode_mode == "sandbox":
-            need(
-                "FINCHNODE_MODE=sandbox",
-                ("FINCHNODE_BASE_URL", self.finchnode_base_url),
-                ("FINCHNODE_API_KEY", self.finchnode_api_key),
-            )
+        if self.finchnode_mode in ("sandbox", "production"):
+            pairs = [("FINCHNODE_API_KEY", self.finchnode_api_key)]
+            if self.finchnode_mode == "sandbox":
+                pairs.append(("FINCHNODE_BASE_URL", self.finchnode_base_url))
+            need(f"FINCHNODE_MODE={self.finchnode_mode}", *pairs)
         if self.notify_mode == "relay_service":
             need("NOTIFY_MODE=relay_service", ("RELAY_SERVICE_URL", self.relay_service_url))
         if self.xai_voice_mode == "live":
@@ -226,21 +227,62 @@ class Settings(BaseSettings):
                 ("OLLAMA_URL", self.ollama_url),
                 ("OLLAMA_MODEL", self.ollama_model),
             )
-        if self.app_env == "prod":
-            need(
-                "APP_ENV=prod",
+        return missing
+
+    def environment_mistakes(self) -> list[str]:
+        """Fail-closed environment rules. Production and staging never run on
+        mock adapters; staging mirrors production apart from sandbox data and
+        test telephony numbers (docs/DEPLOYMENT.md)."""
+        mistakes: list[str] = []
+        if self.app_env not in ("staging", "prod"):
+            return mistakes
+        # Durable shared database: no silent SQLite fallback outside dev/test.
+        if not self.database_url or not self.database_url.startswith("postgresql"):
+            mistakes.append(f"APP_ENV={self.app_env} requires a PostgreSQL DATABASE_URL")
+        # No webhook-signature bypass outside dev/test (TELNYX_WEBHOOK_VERIFY).
+        if not self.telnyx_webhook_verify:
+            mistakes.append(
+                f"APP_ENV={self.app_env} refuses TELNYX_WEBHOOK_VERIFY=false "
+                "(webhook signature verification is mandatory)"
+            )
+        if not self.telnyx_public_key:
+            mistakes.append(f"APP_ENV={self.app_env} requires TELNYX_PUBLIC_KEY")
+        # Public HTTPS endpoint for the Telnyx/Relay webhooks.
+        if not self.public_base_url.startswith("https://") or "localhost" in self.public_base_url:
+            mistakes.append(f"APP_ENV={self.app_env} requires an https PUBLIC_BASE_URL")
+        # Patients must actually be notified through the Relay service.
+        if self.notify_mode != "relay_service":
+            mistakes.append(f"APP_ENV={self.app_env} requires NOTIFY_MODE=relay_service")
+        # The agent network runs as a persistent service, not in-process logic.
+        if self.fetch_mode != "agentverse":
+            mistakes.append(f"APP_ENV={self.app_env} requires FETCH_MODE=agentverse")
+        # No silent mock adapters.
+        if self.xai_voice_mode != "live":
+            mistakes.append(f"APP_ENV={self.app_env} requires XAI_VOICE_MODE=live")
+        if self.telephony_mode != "live":
+            mistakes.append(f"APP_ENV={self.app_env} requires TELEPHONY_MODE=live")
+        expected_finchnode = "sandbox" if self.app_env == "staging" else "production"
+        if self.finchnode_mode != expected_finchnode:
+            mistakes.append(f"APP_ENV={self.app_env} requires FINCHNODE_MODE={expected_finchnode}")
+        if self.app_env in ("staging", "prod"):
+            # Service tokens are real secrets outside dev/test (no dev fallbacks).
+            for name, value in (
                 ("RELAY_SERVICE_TOKEN", self.relay_service_token),
                 ("FETCH_SERVICE_TOKEN", self.fetch_service_token),
                 ("VOICE_SERVICE_TOKEN", self.voice_service_token),
                 ("CORE_WEBHOOK_SECRET", self.core_webhook_secret),
-            )
-        return missing
+            ):
+                if not value:
+                    mistakes.append(f"APP_ENV={self.app_env} requires {name}")
+        if self.app_env == "prod" and "ngrok" in self.public_base_url:
+            mistakes.append("APP_ENV=prod refuses a tunnel (ngrok) PUBLIC_BASE_URL")
+        return mistakes
 
     def validate_for_startup(self) -> None:
         """Raise ConfigError naming every missing variable for the selected modes."""
-        missing = self.missing_live_settings()
-        if missing:
-            lines = "\n".join(f"  - {item}" for item in missing)
+        mistakes = self.missing_live_settings() + self.environment_mistakes()
+        if mistakes:
+            lines = "\n".join(f"  - {item}" for item in mistakes)
             raise ConfigError(
                 "Amyna Core cannot start: live integrations are missing settings.\n"
                 f"{lines}\n"

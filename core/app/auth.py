@@ -129,8 +129,8 @@ def require_scopes(*scopes: str) -> Callable[..., ServiceIdentity]:
 
 # --------------------------------------------------------------------------- webhooks
 
-SIGNATURE_HEADER = "X-ClaimShield-Signature"
-TIMESTAMP_HEADER = "X-ClaimShield-Timestamp"
+SIGNATURE_HEADER = "X-Amyna-Signature"
+TIMESTAMP_HEADER = "X-Amyna-Timestamp"
 SIGNATURE_TOLERANCE_S = 300
 
 
