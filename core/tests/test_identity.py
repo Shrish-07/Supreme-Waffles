@@ -4,9 +4,11 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from app.demo_support import build_isolated_app, service_headers
+from app.demo_support import DATA_CONSENT, build_isolated_app, service_headers
 from app.errors import Forbidden
+from app.models_db import FinchLinkRow
 from app.services.identity_service import (
     PATIENT_TOKEN_HEADER,
     create_demo_session,
@@ -162,3 +164,35 @@ def test_asi_one_never_adopts_a_signed_in_patients_case(
         headers=fetch,
     ).json()
     assert found["created"] is True and found["case"]["case_id"] != owned["case_id"]
+
+
+def test_granted_health_consent_links_finch_on_owned_case(
+    client: TestClient, relay: dict[str, str]
+) -> None:
+    """Regression (CI relay demo 500): granting health-data consent on a
+    user-owned case must mint the FinchLink with the registered id kind --
+    identity_service once passed the *prefix* ("flink") to new_id instead of
+    the *kind* ("finch_link"), so every consent on an owned case 500'd."""
+    mary = _session(client, "relay:mary")
+    headers = {**relay, PATIENT_TOKEN_HEADER: mary["patient_token"]}
+    case = client.post(
+        "/cases",
+        json={"patient": {"finchnode_patient_id": "fn_pat_demo_001"}, "channel": "relay"},
+        headers=headers,
+    ).json()
+    granted = client.post(
+        f"/cases/{case['case_id']}/consents",
+        json={
+            "consent_type": "health_data_access",
+            "consent_text": DATA_CONSENT,
+            "channel": "relay",
+        },
+        headers=headers,
+    )
+    assert granted.status_code == 201
+    with client.app.state.container.session_scope() as db:  # type: ignore[attr-defined]
+        link = db.scalar(select(FinchLinkRow).where(FinchLinkRow.user_id == mary["user_id"]))
+        assert link is not None
+        assert link.id.startswith("flink_")
+        assert link.finchnode_patient_id == "fn_pat_demo_001"
+        assert link.status == "linked"
