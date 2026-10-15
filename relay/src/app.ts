@@ -26,6 +26,7 @@ export function createContext(config: RelayConfig, overrides: Partial<HandlerCon
     core: new CoreClient(config.coreBaseUrl, config.serviceToken, config.coreWebhookSecret),
     relay,
     store: new ConversationStore(join(config.dataDir, "conversations.json")),
+    patientTokens: new Map<string, string>(),
     transcriber: relay.simulatesRecording ? new MockTranscriber() : new LiveTranscriber(config.xaiApiKey, config.xaiSttUrl),
     log: (message) => console.log(`[relay] ${message}`),
     ...overrides,

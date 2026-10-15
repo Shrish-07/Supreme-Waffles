@@ -12,6 +12,15 @@ export const CASE = "case_1";
 
 export class StubCore implements CoreApi {
   state = "CREATED";
+
+  startAuthSession = async () => ({
+    user_id: "user_test",
+    patient_token: "pt_test",
+  }) as Schemas["AuthSessionResult"];
+
+  withPatientToken(): CoreApi {
+    return this;
+  }
   notes: PatientNotification[] = [];
   events: Schemas["RelayWebhookEvent"][] = [];
   dispute: Record<string, unknown> | null = null;
@@ -33,6 +42,30 @@ export class StubCore implements CoreApi {
 
   async createCase() {
     return { case_id: CASE } as Schemas["Case"];
+  }
+  async understandMessage(message: string) {
+    const lower = message.toLowerCase();
+    const intent = lower.includes("claim number")
+      ? "explain_term"
+      : lower.includes("bill")
+        ? "review_bill"
+        : "unknown";
+    return {
+      intent,
+      suggested_action: intent === "explain_term" ? "explain_term" : "request_bill",
+      reply:
+        intent === "explain_term"
+          ? "A claim number is the ID your insurance company assigns to this bill."
+          : "I can look into it. Send me a photo of the bill or tell me what happened.",
+      follow_up_question: null,
+      candidate_claim_number: null,
+      candidate_patient_name: null,
+      candidate_amount_cents: null,
+      confidence: 0.9,
+    } as Schemas["AssistantUnderstandResult"];
+  }
+  async explainTerm(term: string) {
+    return { term, plain_language: "A plain-English explanation." } as Schemas["AssistantTermExplanation"];
   }
   async recordConsent(_caseId: string, body: Schemas["ConsentCreate"]) {
     return { consent_id: `cns_${body.consent_type}` } as Schemas["Consent"];
@@ -116,6 +149,7 @@ export function setup(options: { voiceMemos?: boolean; transcriber?: Transcriber
     relay,
     store: new ConversationStore(),
     transcriber: options.transcriber ?? new MockTranscriber(),
+    patientTokens: new Map<string, string>(),
     log: () => undefined,
   };
   let counter = 0;

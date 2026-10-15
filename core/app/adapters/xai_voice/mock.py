@@ -142,7 +142,7 @@ class MockVoiceAdapter(VoiceAdapter):
         member = view.patient_display_name or "the member"
         if line.kind == "greeting":
             return (
-                f"Hi {MOCK_REP_NAME}, this is an automated assistant from ClaimShield calling on "
+                f"Hi {MOCK_REP_NAME}, this is an automated assistant from Amyna calling on "
                 f"behalf of {member}, who approved this dispute and authorized this call. "
                 f"I'm calling about claim {view.claim_number}."
             )

@@ -4,6 +4,66 @@
  */
 
 export interface paths {
+    "/assistant/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Explain
+         * @description Explain insurance jargon in plain English.
+         */
+        post: operations["explain_assistant_explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/understand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Understand
+         * @description Understand plain-English patient language and draft Amyna's next reply.
+         */
+        post: operations["understand_assistant_understand_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Session
+         * @description Issue an opaque session token (demo environments; disabled in prod).
+         */
+        post: operations["start_session_auth_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases": {
         parameters: {
             query?: never;
@@ -308,6 +368,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/jobs/drain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Drain Jobs
+         * @description Run due durable jobs (worker tick). The 17A merge-expiry sweep rides this.
+         */
+        post: operations["drain_jobs_internal_jobs_drain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Metrics
+         * @description Liveness++: throughput, failures, queue depth, active calls, stuck cases.
+         */
+        get: operations["metrics_internal_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/tools/find_or_create_case": {
         parameters: {
             query?: never;
@@ -404,6 +504,23 @@ export interface paths {
         put?: never;
         /** FinchNode claims (consent-gated) */
         post: operations["tool_get_patient_claims"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/tools/get_patient_context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Authorized, minimized patient context (identifiers only) */
+        post: operations["tool_get_patient_context"];
         delete?: never;
         options?: never;
         head?: never;
@@ -678,8 +795,8 @@ export interface paths {
          * Relay Webhook
          * @description Signed, idempotent patient event from the Relay service.
          *
-         *     Headers: ``X-ClaimShield-Timestamp`` (unix seconds) and
-         *     ``X-ClaimShield-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "{ts}.{raw body}")>``.
+         *     Headers: ``X-Amyna-Timestamp`` (unix seconds) and
+         *     ``X-Amyna-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "{ts}.{raw body}")>``.
          */
         post: operations["relay_webhook_relay_webhook_post"];
         delete?: never;
@@ -785,6 +902,31 @@ export interface paths {
          *     delivery contract.
          */
         post: operations["telnyx_webhook_voice_telnyx_webhook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/voice/xai/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Xai Incoming Call Webhook
+         * @description Signed ``realtime.call.incoming`` from xAI for a bridged SIP call (task 15).
+         *
+         *     Headers (verified against the current xAI SIP docs): ``webhook-id``,
+         *     ``webhook-timestamp``, ``webhook-signature``. The payload's ``data.call_id``
+         *     is attached to our call via the ``x-amyna-call-id`` SIP header we set on
+         *     Telnyx's transfer; then the realtime WebSocket attaches with ``?call_id=``.
+         */
+        post: operations["xai_incoming_call_webhook_voice_xai_webhook_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -899,6 +1041,76 @@ export interface components {
          * @enum {string}
          */
         AgentRunStatus: "running" | "succeeded" | "failed";
+        /** AssistantExplainIn */
+        AssistantExplainIn: {
+            /** Term */
+            term: string;
+        };
+        /** AssistantTermExplanation */
+        AssistantTermExplanation: {
+            /** Plain Language */
+            plain_language: string;
+            /** Term */
+            term: string;
+        };
+        /** AssistantUnderstandIn */
+        AssistantUnderstandIn: {
+            /** Message */
+            message: string;
+        };
+        /** AssistantUnderstandResult */
+        AssistantUnderstandResult: {
+            /** Candidate Amount Cents */
+            candidate_amount_cents?: string | null;
+            /** Candidate Claim Number */
+            candidate_claim_number?: string | null;
+            /** Candidate Patient Name */
+            candidate_patient_name?: string | null;
+            /** Confidence */
+            confidence: number;
+            /** Follow Up Question */
+            follow_up_question?: string | null;
+            /** Intent */
+            intent: string;
+            /** Reply */
+            reply: string;
+            /** Suggested Action */
+            suggested_action: string;
+        };
+        /**
+         * AuthSessionCreate
+         * @description Start an Amyna session for a verified identity subject.
+         *
+         *     In dev/test/staging this issues a demo session (synthetic identities only).
+         *     In production this endpoint is disabled: the identity provider (e.g. the
+         *     Relay platform's verified user) must supply the Amyna-issued session token.
+         */
+        AuthSessionCreate: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Subject */
+            subject: string;
+        };
+        /** AuthSessionResult */
+        AuthSessionResult: {
+            /**
+             * Patient Token
+             * @description Opaque bearer token; Core stores only its hash. Not PHI.
+             */
+            patient_token: string;
+            /** User Id */
+            user_id: string;
+        };
+        /**
+         * CallMergePhase
+         * @description First-class lifecycle of the immediate human merge on a paused call (17A).
+         *
+         *     SENSITIVE_REQUEST_DETECTED -> PATIENT_BEING_CONNECTED -> PATIENT_CONNECTED
+         *     -> PATIENT_HANDLING_VERIFICATION -> PATIENT_RELEASED -> AI_RESUMING.
+         *     MERGE_FAILED is the explicit failure escape (the AI is never auto-resumed).
+         * @enum {string}
+         */
+        CallMergePhase: "sensitive_request_detected" | "patient_being_connected" | "patient_connected_with_human" | "patient_handling_verification" | "patient_released" | "ai_resuming" | "merge_failed";
         /** CallSession */
         CallSession: {
             /** Call Id */
@@ -912,6 +1124,7 @@ export interface components {
             /** Ended At */
             ended_at?: string | null;
             insurer_response?: components["schemas"]["InsurerResponse"] | null;
+            merge_phase?: components["schemas"]["CallMergePhase"] | null;
             /** Open Intervention Id */
             open_intervention_id?: string | null;
             /** Provider Call Ref */
@@ -1261,8 +1474,6 @@ export interface components {
         DecisionType: "finding_answer" | "handoff_resolution" | "dispute_approval" | "dispute_rejection";
         /** Dispute */
         Dispute: {
-            /** Approved At */
-            approved_at?: string | null;
             /** Case Id */
             case_id: string;
             /** Claim Id */
@@ -1302,7 +1513,7 @@ export interface components {
             authorization_text: string;
             /**
              * Authorize Call
-             * @description Also authorize ClaimShield to call the insurer.
+             * @description Also authorize Amyna to call the insurer.
              * @default true
              */
             authorize_call?: boolean;
@@ -1338,6 +1549,8 @@ export interface components {
             /** Line Number */
             line_number: number;
             patient_answer?: components["schemas"]["PatientAnswer"] | null;
+            /** Patient Facing Explanation */
+            patient_facing_explanation?: string | null;
             /** Policy Citations */
             policy_citations?: components["schemas"]["PolicyCitation"][];
             recommended_action: components["schemas"]["DisputeAction"];
@@ -1535,6 +1748,18 @@ export interface components {
         };
         /** GetDisputeCaseRequest */
         GetDisputeCaseRequest: {
+            agent_run?: components["schemas"]["AgentRunRef"] | null;
+            /** Case Id */
+            case_id: string;
+        };
+        /**
+         * GetPatientContextRequest
+         * @description Ask Core for the case's authorized patient context (prompt task 6).
+         *
+         *     The language/agent layers never receive raw patient credentials; Core is the
+         *     only door to private data, and it answers with the minimum, consent-gated set.
+         */
+        GetPatientContextRequest: {
             agent_run?: components["schemas"]["AgentRunRef"] | null;
             /** Case Id */
             case_id: string;
@@ -1778,6 +2003,13 @@ export interface components {
          * @enum {string}
          */
         IssueType: "unsupported_charge" | "duplicate_charge" | "unknown_medication" | "code_mismatch" | "price_above_published";
+        /** JobsDrainResult */
+        JobsDrainResult: {
+            /** Failed */
+            failed: number;
+            /** Ran */
+            ran: number;
+        };
         /** LineAssessment */
         LineAssessment: {
             /** Claim Line Id */
@@ -1803,6 +2035,39 @@ export interface components {
          * @enum {string}
          */
         MatchMethod: "source_record" | "exact" | "alias" | "fuzzy";
+        /**
+         * MetricsSnapshot
+         * @description GET /internal/metrics. Counts only -- never PHI.
+         */
+        MetricsSnapshot: {
+            /**
+             * Active Calls
+             * @default 0
+             */
+            active_calls?: number;
+            /** Latency Avg Ms */
+            latency_avg_ms?: {
+                [key: string]: number;
+            };
+            /**
+             * Open Interventions
+             * @default 0
+             */
+            open_interventions?: number;
+            /** Queue Depth */
+            queue_depth?: {
+                [key: string]: number;
+            };
+            /** Requests */
+            requests?: {
+                [key: string]: number;
+            };
+            /**
+             * Stuck Cases 24H
+             * @default 0
+             */
+            stuck_cases_24h?: number;
+        };
         /** NotificationButton */
         NotificationButton: {
             /** Id */
@@ -1824,6 +2089,24 @@ export interface components {
         PatientClaims: {
             /** Claims */
             claims: components["schemas"]["Claim"][];
+        };
+        /**
+         * PatientContext
+         * @description Minimum data a language layer may ever see for a case.
+         */
+        PatientContext: {
+            /** Case Id */
+            case_id: string;
+            /** Finchnode Patient Id */
+            finchnode_patient_id: string;
+            /** Has Health Data Consent */
+            has_health_data_consent: boolean;
+            /** Member Ref Masked */
+            member_ref_masked?: string | null;
+            /** Patient Display Name */
+            patient_display_name?: string | null;
+            /** Payer Name */
+            payer_name?: string | null;
         };
         /**
          * PatientDataRequest
@@ -2332,6 +2615,105 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    explain_assistant_explain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantExplainIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantTermExplanation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    understand_assistant_understand_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantUnderstandIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantUnderstandResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_session_auth_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthSessionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSessionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_case_cases_post: {
         parameters: {
             query?: never;
@@ -2841,6 +3223,46 @@ export interface operations {
             };
         };
     };
+    drain_jobs_internal_jobs_drain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsDrainResult"];
+                };
+            };
+        };
+    };
+    metrics_internal_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricsSnapshot"];
+                };
+            };
+        };
+    };
     tool_find_or_create_case: {
         parameters: {
             query?: never;
@@ -3026,6 +3448,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PatientClaims"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tool_get_patient_context: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GetPatientContextRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientContext"];
                 };
             };
             /** @description Validation Error */
@@ -3700,6 +4155,28 @@ export interface operations {
         };
     };
     telnyx_webhook_voice_telnyx_webhook_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+        };
+    };
+    xai_incoming_call_webhook_voice_xai_webhook_post: {
         parameters: {
             query?: never;
             header?: never;

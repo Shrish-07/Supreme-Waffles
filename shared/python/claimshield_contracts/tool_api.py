@@ -73,6 +73,7 @@ class ToolName(StrEnum):
     REQUEST_HUMAN = "request_human"
     START_INSURANCE_CALL = "start_insurance_call"
     RECORD_INSURER_RESPONSE = "record_insurer_response"
+    GET_PATIENT_CONTEXT = "get_patient_context"
 
 
 # --------------------------------------------------------------------------- base
@@ -172,6 +173,25 @@ class PatientRecords(ContractModel):
 
 class PatientClaims(ContractModel):
     claims: list[Claim]
+
+
+class GetPatientContextRequest(ToolRequest):
+    """Ask Core for the case's authorized patient context (prompt task 6).
+
+    The language/agent layers never receive raw patient credentials; Core is the
+    only door to private data, and it answers with the minimum, consent-gated set.
+    """
+
+
+class PatientContext(ContractModel):
+    """Minimum data a language layer may ever see for a case."""
+
+    case_id: str
+    patient_display_name: str | None = None
+    member_ref_masked: str | None = None
+    payer_name: str | None = None
+    finchnode_patient_id: str  # an identifier, not a credential
+    has_health_data_consent: bool
 
 
 # --------------------------------------------------------------------------- analysis
@@ -294,6 +314,7 @@ TOOL_SPECS: dict[ToolName, tuple[type[BaseModel], type[BaseModel]]] = {
     ToolName.REQUEST_HUMAN: (RequestHumanRequest, HumanIntervention),
     ToolName.START_INSURANCE_CALL: (StartInsuranceCallRequest, CallSession),
     ToolName.RECORD_INSURER_RESPONSE: (RecordInsurerResponseRequest, InsurerResponse),
+    ToolName.GET_PATIENT_CONTEXT: (GetPatientContextRequest, PatientContext),
 }
 
 
@@ -314,6 +335,7 @@ AGENT_TOOLS: dict[AgentName, frozenset[ToolName]] = {
     AgentName.VISIT_AGENT: frozenset(
         {
             ToolName.GET_CASE,
+            ToolName.GET_PATIENT_CONTEXT,
             ToolName.GET_VISIT_TRANSCRIPT,
             ToolName.GET_SUPPORTING_EVIDENCE,
             ToolName.RECORD_VISIT_EVIDENCE,
@@ -322,6 +344,7 @@ AGENT_TOOLS: dict[AgentName, frozenset[ToolName]] = {
     AgentName.CLAIM_AGENT: frozenset(
         {
             ToolName.GET_CASE,
+            ToolName.GET_PATIENT_CONTEXT,
             ToolName.GET_CASE_CLAIM,
             ToolName.GET_SUPPORTING_EVIDENCE,
             ToolName.GET_PATIENT_CLAIMS,
@@ -346,6 +369,7 @@ AGENT_TOOLS: dict[AgentName, frozenset[ToolName]] = {
             ToolName.GET_SUPPORTING_EVIDENCE,
             ToolName.RECORD_INSURER_RESPONSE,
             ToolName.REQUEST_HUMAN,
+            ToolName.GET_PATIENT_CONTEXT,
         }
     ),
 }
@@ -369,6 +393,7 @@ class CoreTools(Protocol):
     def record_consent(self, req: RecordConsentRequest) -> Consent: ...
     def ingest_claim(self, req: IngestClaimRequest) -> Claim: ...
     def get_case_claim(self, req: GetCaseClaimRequest) -> Claim: ...
+    def get_patient_context(self, req: GetPatientContextRequest) -> PatientContext: ...
     def get_visit_transcript(self, req: GetVisitTranscriptRequest) -> VisitTranscriptView: ...
     def record_visit_evidence(
         self, req: RecordVisitEvidenceRequest

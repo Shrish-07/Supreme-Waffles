@@ -167,7 +167,7 @@ class DisputeApproval(InputModel):
         min_length=10, description="Exact authorization wording the patient saw and accepted."
     )
     authorize_call: bool = Field(
-        default=True, description="Also authorize ClaimShield to call the insurer."
+        default=True, description="Also authorize Amyna to call the insurer."
     )
 
 
@@ -263,3 +263,77 @@ class HealthStatus(ContractModel):
     app_env: str
     database: str
     modes: dict[str, str]
+
+
+# --------------------------------------------------------------------- assistant
+# The Amyna language layer (core/app/services/assistant_service.py) over HTTP.
+# These endpoints are STATELESS: no database access, no private data, no
+# authorization decisions -- they understand language and return candidates.
+
+
+class AssistantUnderstandIn(InputModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class AssistantUnderstandResult(ContractModel):
+    intent: str
+    # One of the allowlisted workflow nudges (never executed by the LLM layer).
+    suggested_action: str
+    # Ready-to-send, plain-English reply for the patient (conversational UIs).
+    reply: str
+    follow_up_question: str | None = None
+    # Candidates only: the caller must verify them before acting.
+    candidate_claim_number: str | None = None
+    candidate_patient_name: str | None = None
+    candidate_amount_cents: str | None = None
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class AssistantExplainIn(InputModel):
+    term: str = Field(min_length=1, max_length=200)
+
+
+class AssistantTermExplanation(ContractModel):
+    term: str
+    plain_language: str
+
+
+# --------------------------------------------------------------------- identity
+
+
+class AuthSessionCreate(InputModel):
+    """Start an Amyna session for a verified identity subject.
+
+    In dev/test/staging this issues a demo session (synthetic identities only).
+    In production this endpoint is disabled: the identity provider (e.g. the
+    Relay platform's verified user) must supply the Amyna-issued session token.
+    """
+
+    subject: str = Field(min_length=3, max_length=120)
+    display_name: str | None = Field(default=None, max_length=120)
+
+
+class AuthSessionResult(ContractModel):
+    user_id: str
+    patient_token: str = Field(
+        description="Opaque bearer token; Core stores only its hash. Not PHI."
+    )
+
+
+# --------------------------------------------------------------------- ops
+
+
+class JobsDrainResult(ContractModel):
+    ran: int
+    failed: int
+
+
+class MetricsSnapshot(ContractModel):
+    """GET /internal/metrics. Counts only -- never PHI."""
+
+    requests: dict[str, int] = Field(default_factory=dict)
+    latency_avg_ms: dict[str, int] = Field(default_factory=dict)
+    queue_depth: dict[str, int] = Field(default_factory=dict)
+    active_calls: int = 0
+    open_interventions: int = 0
+    stuck_cases_24h: int = 0

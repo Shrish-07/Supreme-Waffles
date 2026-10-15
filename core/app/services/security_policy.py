@@ -121,7 +121,7 @@ def reject_sensitive_notes(text: str | None) -> None:
     found = contains_sensitive_data(text)
     if found:
         raise SensitiveDataRejected(
-            "ClaimShield never stores sensitive identifiers. Remove them and try again.",
+            "Amyna never stores sensitive identifiers. Remove them and try again.",
             categories=found,
         )
 

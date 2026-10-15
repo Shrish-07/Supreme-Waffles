@@ -34,10 +34,12 @@ from claimshield_contracts.tool_api import (
     GetCaseRequest,
     GetClaimLineRequest,
     GetDisputeCaseRequest,
+    GetPatientContextRequest,
     GetSupportingEvidenceRequest,
     GetVisitTranscriptRequest,
     IngestClaimRequest,
     PatientClaims,
+    PatientContext,
     PatientDataRequest,
     PatientRecords,
     RecordConsentRequest,
@@ -145,6 +147,9 @@ class CoreClient:
 
     def get_dispute_case(self, req: GetDisputeCaseRequest) -> DisputeCaseView:
         return self._call(ToolName.GET_DISPUTE_CASE, req)
+
+    def get_patient_context(self, req: GetPatientContextRequest) -> PatientContext:
+        return self._call(ToolName.GET_PATIENT_CONTEXT, req)
 
     def record_dispute(self, req: RecordDisputeRequest) -> Dispute:
         return self._call(ToolName.RECORD_DISPUTE, req)

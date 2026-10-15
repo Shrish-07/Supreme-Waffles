@@ -25,7 +25,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from claimshield_contracts.api import VoiceEventIn
-from claimshield_contracts.enums import VoiceEventType
+from claimshield_contracts.enums import CallMergePhase, VoiceEventType
 
 from ..adapters.telephony.telnyx_sip import TelnyxSipTelephony, split_client_state
 from ..adapters.telephony.webhook_signature import verify_telnyx_signature
@@ -158,6 +158,11 @@ def _bridge_human_leg(container: "Container", call_control_id: object, call_id: 
         log.warning("human bridge failed", extra={"fields": {"call_id": call_id, "code": exc.code}})
         return True  # ack anyway: Telnyx would only retry the same failure
     with container.session_scope() as db:
+        call = db.get(CallRow, call_id)
+        if call is not None:
+            # 17A: the patient is now speaking with the human representative.
+            call.merge_phase = CallMergePhase.PATIENT_CONNECTED.value
+            call.merge_deadline_at = None
         record_audit(
             db,
             actor=ACTOR,
@@ -178,6 +183,10 @@ def _clear_human_leg(container: "Container", call_id: str | None) -> bool:
         if call is None or call.human_call_ref is None:
             return False
         call.human_call_ref = None
+        # The verify-by-human interaction finished; the AI STAYS paused until the
+        # patient explicitly completes the handoff (DONE) via the intervention.
+        call.merge_phase = CallMergePhase.PATIENT_RELEASED.value
+        call.merge_deadline_at = None
         record_audit(
             db,
             actor=ACTOR,

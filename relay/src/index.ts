@@ -1,5 +1,5 @@
 /**
- * ClaimShield Relay service.
+ * Amyna Relay service.
  *   POST /webhook/relay   Relay platform events (signature-verified in live mode, idempotent)
  *   POST /internal/notify Core -> patient notifications (bearer RELAY_SERVICE_TOKEN)
  *   GET  /health

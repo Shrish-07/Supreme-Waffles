@@ -28,6 +28,7 @@ VOICE_TOOLS: frozenset[ToolName] = frozenset(
         ToolName.GET_SUPPORTING_EVIDENCE,
         ToolName.RECORD_INSURER_RESPONSE,
         ToolName.REQUEST_HUMAN,
+        ToolName.GET_PATIENT_CONTEXT,
     }
 )
 # Agents may do everything except record what the insurer said on a call.
@@ -36,6 +37,7 @@ FETCH_TOOLS: frozenset[ToolName] = frozenset(ToolName) - {ToolName.RECORD_INSURE
 SCOPES: dict[ServiceName, frozenset[str]] = {
     ServiceName.RELAY: frozenset(
         {
+            "assistant:use",
             "cases:read",
             "cases:write",
             "consents:write",
@@ -52,7 +54,14 @@ SCOPES: dict[ServiceName, frozenset[str]] = {
             "voice:handoff",
         }
     ),
-    ServiceName.FETCH: frozenset({"cases:read", *(tool_scope(t) for t in FETCH_TOOLS)}),
+    ServiceName.FETCH: frozenset(
+        {
+            "cases:read",
+            "jobs:run",
+            "metrics:read",
+            *(tool_scope(t) for t in FETCH_TOOLS),
+        }
+    ),
     ServiceName.VOICE: frozenset(
         {"voice:read", "voice:events", "voice:handoff", *(tool_scope(t) for t in VOICE_TOOLS)}
     ),
@@ -129,8 +138,8 @@ def require_scopes(*scopes: str) -> Callable[..., ServiceIdentity]:
 
 # --------------------------------------------------------------------------- webhooks
 
-SIGNATURE_HEADER = "X-ClaimShield-Signature"
-TIMESTAMP_HEADER = "X-ClaimShield-Timestamp"
+SIGNATURE_HEADER = "X-Amyna-Signature"
+TIMESTAMP_HEADER = "X-Amyna-Timestamp"
 SIGNATURE_TOLERANCE_S = 300
 
 

@@ -26,11 +26,11 @@ from .db import Base
 from .main import create_app
 
 RECORDING_CONSENT = (
-    "I agree that ClaimShield may record and transcribe this appointment for my bill review."
+    "I agree that Amyna may record and transcribe this appointment for my bill review."
 )
-APPROVAL_TEXT = "I approve this dispute and authorize ClaimShield to call my insurer."
+APPROVAL_TEXT = "I approve this dispute and authorize Amyna to call my insurer."
 DATA_CONSENT = (
-    "I allow ClaimShield to read my FinchNode health records (encounters, procedures, "
+    "I allow Amyna to read my FinchNode health records (encounters, procedures, "
     "medications and claims) to review this bill."
 )
 

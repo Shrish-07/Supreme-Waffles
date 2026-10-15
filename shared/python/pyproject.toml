@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "claimshield-contracts"
 version = "1.0.0"
-description = "ClaimShield shared contracts: domain models, HTTP schemas, uAgents messages"
+description = "Amyna shared contracts: domain models, HTTP schemas, uAgents messages"
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.8,<3"]
 

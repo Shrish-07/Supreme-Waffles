@@ -149,7 +149,7 @@ def approve(
     )
     payer = case.payer_name or "your insurer"
     if not authorize_call:
-        # Letter only: nothing else for ClaimShield to do, so close the case.
+        # Letter only: nothing else for Amyna to do, so close the case.
         transition(db, case, CaseState.RESOLVED, actor=actor, reason="approved without a call")
         notification_service.notify_status(
             db,
@@ -161,7 +161,7 @@ def approve(
         return dispute
     total = format_cents(dispute.total_disputed_cents)
     notification_service.notify_status(
-        db, container, case, f"Approved. ClaimShield will call {payer} about {total}."
+        db, container, case, f"Approved. Amyna will call {payer} about {total}."
     )
     return dispute
 

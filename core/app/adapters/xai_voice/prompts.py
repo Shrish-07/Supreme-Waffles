@@ -12,7 +12,7 @@ from claimshield_contracts.tool_api import DisputeCaseView
 from ...services.notification_service import format_cents
 
 VOICE_SYSTEM_PROMPT = """\
-You are ClaimShield's phone assistant, calling a health insurer on behalf of a
+You are Amyna's phone assistant, calling a health insurer on behalf of a
 patient about a billing dispute. Follow these rules without exception:
 
 1. Authority. You act only for the patient named in the case context, who has

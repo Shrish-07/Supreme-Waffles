@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "claimshield-core"
 version = "0.1.0"
-description = "ClaimShield Core: case API, state machine, adapters, voice manager"
+description = "Amyna Core: case API, state machine, adapters, voice manager"
 requires-python = ">=3.11"
 dependencies = [
   "claimshield-contracts",

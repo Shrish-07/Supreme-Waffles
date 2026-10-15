@@ -33,6 +33,7 @@ TOOL_SUMMARIES: dict[ToolName, str] = {
     ToolName.RECORD_FINDINGS: "Persist discrepancy findings; opens confirmation questions",
     ToolName.GET_CLAIM_LINE: "One claim line of this case",
     ToolName.GET_DISPUTE_CASE: "PHI-reduced dispute view for dispute/voice agents",
+    ToolName.GET_PATIENT_CONTEXT: "Authorized, minimized patient context (identifiers only)",
     ToolName.RECORD_DISPUTE: "Persist a dispute package; requests patient approval",
     ToolName.RECORD_PATIENT_DECISION: "Relay an explicit patient approve/reject from chat",
     ToolName.RESOLVE_HUMAN_INTERVENTION: "Answer a question or finish a handoff",

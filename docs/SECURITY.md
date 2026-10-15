@@ -1,6 +1,6 @@
 # Security & Safety
 
-> **Prototype disclaimer.** ClaimShield is a hackathon prototype. It is **not**
+> **Prototype disclaimer.** Amyna is a hackathon prototype. It is **not**
 > HIPAA-compliant and has not had a security review. Use **synthetic data only**:
 > no real patients, member IDs, phone numbers, recordings, or credentials.
 
@@ -33,7 +33,7 @@
 - In `APP_ENV=dev|test`, empty tokens fall back to well-known dev tokens and Core
   logs a warning. In `APP_ENV=prod`, missing tokens are a startup error.
 - **Signed webhooks**: `POST /relay/webhook` requires
-  `X-ClaimShield-Timestamp` + `X-ClaimShield-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "{timestamp}.{raw_body}")>`.
+  `X-Amyna-Timestamp` + `X-Amyna-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "{timestamp}.{raw_body}")>`.
   Requests more than 300 s old are rejected (replay protection). Each `event_id` is
   processed once; duplicates return the stored result (idempotency).
 - The Relay service verifies Relay-platform webhooks with `RELAY_WEBHOOK_SECRET`
@@ -87,3 +87,32 @@
    new chat (the demo relies on this to resume across chats). Bind ASI:One senders to
    verified patients before real use.
 5. **Single-process mock call state**: mock call cursors live in Core's memory.
+
+## Identity model (tasks 5/19)
+
+- An `fn_pat_...` ID is an identifier, never a credential.
+- Cases belong to authenticated accounts (`users`); Relay forwards a patient
+  session token (`X-Amyna-Patient-Token`) per patient; Core keeps only the
+  token hash (sha256). Owned cases reject any other session (or a bare service
+  token) on reads and consent writes (`case_forbidden`).
+- Granting health-data consent binds the case's FinchNode identity to the
+  owner (`finch_links`, audited as `identity.finch_linked`); all record reads
+  remain consent-gated tool calls.
+- `POST /auth/session` issues demo sessions for dev/test/staging; production
+  disables it (`dev_sessions_disabled`) and in production a Relay-created case
+  without a patient session is refused (`patient_session_required`).
+- The ASI:One/orchestrator path stays demo-scoped: an Agentverse sender
+  address alone proves nothing and never acts on user-bound cases.
+
+## 17A human-merge (sensitive requests)
+
+The insurer call carries an explicit merge lifecycle
+(`sensitive_request_detected → patient_being_connected → patient_connected_with_human →
+patient_handling_verification → patient_released → ai_resuming`), with
+`merge_failed` on dial/timeout failures. The AI never resumes automatically;
+only the explicit patient DONE resumes it, and only after the human leg has
+been released. An unreachable patient escalates (deadline via
+`HUMAN_MERGE_TIMEOUT_S`, swept by a durable job) and gets a plain-language
+notification; the insurer leg is kept alive within policy. No sensitive value
+ever passes through or comes back (redaction in `security_policy` +
+`audit.py`).

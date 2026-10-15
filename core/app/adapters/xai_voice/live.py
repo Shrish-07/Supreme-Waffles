@@ -56,9 +56,16 @@ class _LiveCall:
 
 
 class XaiRealtimeVoiceAdapter(VoiceAdapter):
-    """One realtime session per insurer call."""
+    """One realtime session per insurer call.
+
+    SIP mode (docs-verified 2026-10): the carrier bridges the insurer leg to
+    ``sip:{number}@sip.voice.x.ai;transport=tls``; xAI then fires a signed
+    realtime.call.incoming webhook including ``data.call_id``; this adapter
+    attaches with ``?call_id=...``. See routers/voice.py /voice/xai/webhook.
+    """
 
     mode = "live"
+    needs_sip_attach = True
 
     def __init__(self, *, api_key: str, url: str, model: str | None, voice: str | None) -> None:
         self._api_key = api_key
@@ -104,8 +111,12 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
         return {"type": "session.update", "session": session}
 
     def _endpoint(self, config: VoiceSessionConfig) -> str:
+        # SIP attach (verified): attach to the provider-side call; otherwise a
+        # fresh realtime conversation is created for `?model=`.
+        if config.bridge_call_id:
+            return f"{self._url}?call_id={config.bridge_call_id}"
         model = config.model or self._model
-        return f"{self._url}?model={model}" if model else self._url  # VERIFY query parameter
+        return f"{self._url}?model={model}" if model else self._url
 
     async def _run(self, call: _LiveCall, handler: VoiceEventHandler) -> None:
         import websockets  # live-only dependency

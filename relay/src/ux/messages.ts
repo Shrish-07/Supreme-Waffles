@@ -29,10 +29,10 @@ export const HANDOFF_BUTTONS: Button[] = [BUTTONS.done, BUTTONS.cancel];
 
 /** Must be >= 10 chars; stored verbatim as the consent text in Core. */
 export const DATA_CONSENT_TEXT =
-  "I allow ClaimShield to read my FinchNode health records (encounters, procedures, " +
+  "I allow Amyna to read my FinchNode health records (encounters, procedures, " +
   "medications and claims) to review this bill.";
 export const RECORDING_CONSENT_TEXT =
-  "I agree that ClaimShield may record and transcribe this appointment for my bill review.";
+  "I agree that Amyna may record and transcribe this appointment for my bill review.";
 
 /** The extractor marks ruled-out services as "NOT anesthesia"; patients read "no anesthesia". */
 function describeEvidence(item: { description: string; negated?: boolean }): string {
@@ -47,9 +47,15 @@ export function listItems(items: string[]): string {
 
 export const copy = {
   welcome:
-    "Hi! I'm ClaimShield. I compare your medical bills with your health records and visit " +
-    "recordings, flag possible billing errors, and help you dispute them.\n\n" +
-    "Please send your FinchNode patient ID to get started.",
+    "Hi! I'm Amyna. I check medical bills against your health records and help fix " +
+    "billing mistakes.\n\nTell me what's going on in your own words -- for example " +
+    "\"this bill looks wrong\" -- or send me a photo of the bill.",
+  // Shown only when the flow truly needs the patient ID (demo/sandbox identity).
+  // Explained in plain English; the patient never has to know terms in advance.
+  idGuidance:
+    "When you're ready, paste your patient ID (the code starting with fn_pat_ on " +
+    "your records paperwork) and I'll link your health records. If you don't know " +
+    "it, just tell me what the bill says and I'll help you find it.",
   dataConsent: (): OutboundMessage => ({
     text: `To review your bills I need your permission:\n\n"${DATA_CONSENT_TEXT}"`,
     buttons: [BUTTONS.consentYes, BUTTONS.consentNo],

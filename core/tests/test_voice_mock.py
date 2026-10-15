@@ -238,7 +238,8 @@ def _ready_to_call(tmp_path: Path):
     app = build_isolated_app(
         tmp_path / "merge.db",
         human_handoff_phone="+15555550199",
-        telephony_allowed_numbers="+15555550100,+15555550199",
+        # The demo payer line (from the fixtures) + the human-merge line.
+        telephony_allowed_numbers="+12487208903,+15555550199",
     )
     client = TestClient(app)
     relay = service_headers(app.state.container.settings, ServiceName.RELAY)
@@ -278,6 +279,32 @@ def test_a_paused_call_dials_bridges_and_releases_the_human(tmp_path: Path) -> N
     ).json()
     assert resolved["case_state"] == "RESOLVED"
     assert telephony.hung_up[0] == f"MOCK-HU-{call_id[-8:]}"  # the human leaves first
+
+
+def test_duplicate_sensitive_request_does_not_merge_a_second_human_leg(tmp_path: Path) -> None:
+    """17A: a repeated sensitive request (or duplicate event) while paused must be
+    idempotent -- one open intervention, one dialed human leg, one bridge."""
+    app, client, relay, setup = _ready_to_call(tmp_path)
+    voice = service_headers(app.state.container.settings, ServiceName.VOICE)
+    call = client.post("/voice/start", json={"case_id": setup["case_id"]}, headers=relay).json()
+    call_id = call["call_id"]
+    telephony = app.state.container.telephony
+    assert call["status"] == "paused_for_human"
+    assert telephony.human_dialed == [call_id]
+    first_intervention = call["open_intervention_id"]
+    # The insurer repeats the sensitive request while the call is already paused.
+    again = client.post(
+        f"/voice/{call_id}/event",
+        json={
+            "type": "insurer_utterance",
+            "text": "Once more, I need the member's Social Security number.",
+        },
+        headers=voice,
+    ).json()
+    assert again["call"]["status"] == "paused_for_human"
+    assert again["call"]["open_intervention_id"] == first_intervention
+    assert telephony.human_dialed == [call_id]
+    assert len(telephony.bridged) == 1
 
 
 def test_a_failed_human_dial_still_pauses_the_call(

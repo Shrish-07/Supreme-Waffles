@@ -1,5 +1,6 @@
 """Claim Agent logic: claim + FinchNode records + visit evidence -> findings."""
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from claimshield_contracts.agent_messages import (
@@ -60,6 +61,30 @@ def _response(
     )
 
 
+def _pull_patient_records(tools: CoreTools, data: PatientDataRequest) -> tuple[list, list[str]]:
+    """Pull encounters/procedures/medications CONCURRENTLY (prompt task 11).
+
+    Independent network inputs run in parallel with the same correlation id;
+    a failed source never loses the successful ones -- analysis proceeds with
+    what came back and the failed source names are returned for the run log.
+    """
+    pulls = {
+        "encounters": lambda: tools.get_patient_encounters(data).records,
+        "procedures": lambda: tools.get_patient_procedures(data).records,
+        "medications": lambda: tools.get_patient_medications(data).records,
+    }
+    records: list = []
+    failed: list[str] = []
+    with ThreadPoolExecutor(max_workers=3, thread_name_prefix="claim-records") as pool:
+        futures = {name: pool.submit(fn) for name, fn in pulls.items()}
+        for name, future in futures.items():
+            try:
+                records.extend(future.result())
+            except CoreToolError:
+                failed.append(name)
+    return records, failed
+
+
 def handle_claim_analysis_request(
     tools: CoreTools, req: ClaimAnalysisRequest, deps: ClaimLogicDeps | None = None
 ) -> ClaimAnalysisResponse:
@@ -82,11 +107,9 @@ def handle_claim_analysis_request(
                 case_state=case.state.value,
             )
         data = PatientDataRequest(case_id=req.case_id)
-        records = [
-            *tools.get_patient_encounters(data).records,
-            *tools.get_patient_procedures(data).records,
-            *tools.get_patient_medications(data).records,
-        ]
+        records, failed_sources = _pull_patient_records(tools, data)
+        if len(failed_sources) == 3:
+            return _response(req, case, error="all record pulls failed")
         claim = case.claim
         analysis = analyze_claim(
             claim,

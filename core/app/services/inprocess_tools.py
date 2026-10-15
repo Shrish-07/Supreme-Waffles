@@ -31,10 +31,12 @@ from claimshield_contracts.tool_api import (
     GetCaseRequest,
     GetClaimLineRequest,
     GetDisputeCaseRequest,
+    GetPatientContextRequest,
     GetSupportingEvidenceRequest,
     GetVisitTranscriptRequest,
     IngestClaimRequest,
     PatientClaims,
+    PatientContext,
     PatientDataRequest,
     PatientRecords,
     RecordConsentRequest,
@@ -87,6 +89,9 @@ class InProcessTools:
 
     def get_case_claim(self, req: GetCaseClaimRequest) -> Claim:
         return self._call(self._svc.get_case_claim, req)
+
+    def get_patient_context(self, req: GetPatientContextRequest) -> PatientContext:
+        return self._call(self._svc.get_patient_context, req)
 
     def get_visit_transcript(self, req: GetVisitTranscriptRequest) -> VisitTranscriptView:
         return self._call(self._svc.get_visit_transcript, req)
