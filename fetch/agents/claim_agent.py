@@ -31,7 +31,7 @@ def build_claim_agent(
         config=EngineConfig(confirmation_threshold=settings.confirmation_threshold)
     )
     return build_specialist(
-        name="claimshield-claim-agent",
+        name="amyna-claim-agent",
         agent_name=AgentName.CLAIM_AGENT,
         seed_env="CLAIM_AGENT_SEED",
         port=PORT,

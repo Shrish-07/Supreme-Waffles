@@ -7,12 +7,26 @@ Enum values are stored as strings (the contract enums' values). JSON columns hol
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base, utcnow
 
 ID = String(40)
+#: ``cases.finchnode_patient_id`` placeholder while the patient is still in FinchNode
+#: Connect (the real subject arrives with consent.granted). Never sent to FinchNode.
+PENDING_CONNECT_PREFIX = "pending-connect:"
 
 
 def _created() -> Mapped[datetime]:
@@ -66,6 +80,8 @@ class CaseRow(Base):
     member_ref: Mapped[str | None] = mapped_column(String(80))
     payer_name: Mapped[str | None] = mapped_column(String(200))
     payer_phone: Mapped[str | None] = mapped_column(String(32))
+    # The patient's own number, confirmed by the patient, for the human merge leg.
+    patient_phone: Mapped[str | None] = mapped_column(String(32))
     patient_state: Mapped[str | None] = mapped_column(String(2))
     external_ref: Mapped[str | None] = mapped_column(String(120))
     failure_reason: Mapped[str | None] = mapped_column(Text)
@@ -283,6 +299,15 @@ class CallRow(Base):
     merge_deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # xAI-side call id after the carrier leg bridges to xAI SIP (task 15).
     xai_call_ref: Mapped[str | None] = mapped_column(String(120))
+    # Telnyx conference that holds the insurer, the AI leg and (when needed) the patient.
+    conference_ref: Mapped[str | None] = mapped_column(String(120))
+    # Telnyx call control id of the outbound leg to the xAI SIP endpoint.
+    ai_leg_ref: Mapped[str | None] = mapped_column(String(120))
+    # Call start sequence: answered -> playing_authorization -> connecting_assistant
+    # -> assistant_connected (or assistant_transferred when conferencing failed).
+    media_phase: Mapped[str | None] = mapped_column(String(32))
+    # Safety deadline for the current media step (e.g. a playback that never ends).
+    media_deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     to_number_masked: Mapped[str | None] = mapped_column(String(32))
     turns: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     insurer_response: Mapped[dict[str, Any] | None] = mapped_column(JSON)
@@ -290,6 +315,24 @@ class CallRow(Base):
     started_at: Mapped[datetime] = _created()
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     end_reason: Mapped[str | None] = mapped_column(Text)
+
+
+class AuthorizationRecordingRow(Base):
+    """The patient's spoken authorization memo, converted for phone playback (MP3).
+
+    PHI: served only through an unguessable token (only its hash is stored) and
+    only while the case has a live insurer call.
+    """
+
+    __tablename__ = "authorization_recordings"
+
+    id: Mapped[str] = mapped_column(ID, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), unique=True, index=True)
+    audio: Mapped[bytes] = mapped_column(LargeBinary)
+    mime_type: Mapped[str] = mapped_column(String(32))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = _created()
 
 
 class AgentRunRow(Base):
@@ -363,6 +406,34 @@ class JobRow(Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _created()
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class FinchConnectSessionRow(Base):
+    """A FinchNode hosted Connect session started for a case (the patient's link)."""
+
+    __tablename__ = "finch_connect_sessions"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)  # FinchNode's cs_... id
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    subject: Mapped[str | None] = mapped_column(String(80), index=True)
+    url: Mapped[str] = mapped_column(Text)
+    environment: Mapped[str | None] = mapped_column(String(16))
+    expires_at: Mapped[str | None] = mapped_column(String(40))
+    created_at: Mapped[datetime] = _created()
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class FinchNodeWebhookEventRow(Base):
+    """Idempotency ledger for POST /finchnode/webhook (FinchNode retries ~41 h)."""
+
+    __tablename__ = "finchnode_webhook_events"
+
+    event_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(64))
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    received_at: Mapped[datetime] = _created()
 
 
 class WebhookEventRow(Base):

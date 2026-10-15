@@ -1,6 +1,10 @@
 /**
  * Simulated patient conversation through the real handlers (mock Relay adapter)
  * against a running Core:   make dev-local   then   make relay-demo
+ *
+ * Mirrors the production flow: consent -> (optional authorization memo, skipped)
+ * -> patient id -> bill review -> open questions -> approval -> ask-before-calling
+ * -> SSN handoff -> resolved report.
  */
 import { resolve } from "node:path";
 
@@ -18,14 +22,16 @@ type Step = { text: string } | { button: string } | { tap: string };
 
 const SCRIPT: Step[] = [
   { text: "hi" },
-  { text: "fn_pat_demo_001" },
   { button: "CONSENT_YES" },
-  { button: "RECORD_YES" },
+  // The authorization voice memo is optional; sending the patient ID skips it.
+  { text: "fn_pat_demo_001" },
   { button: "REVIEW_BILL" },
   { text: "CLM-2026-0915-001" },
   { tap: "NO" },
   { tap: "NOT_SURE" },
   { tap: "APPROVE" },
+  // Ask-before-calling: the patient must say yes before Amyna dials.
+  { button: "CALL_INSURER" },
   { tap: "DONE" },
 ];
 

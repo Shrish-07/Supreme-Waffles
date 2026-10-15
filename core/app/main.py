@@ -23,6 +23,7 @@ from .routers import (
     cases,
     claims,
     disputes,
+    finchnode,
     health,
     human,
     identity,
@@ -55,6 +56,10 @@ TAGS = [
     {"name": "human", "description": "Human-in-the-loop questions and handoffs"},
     {"name": "voice", "description": "Insurer calls (Core owns the session)"},
     {"name": "relay", "description": "Signed events from the Relay service"},
+    {
+        "name": "finchnode",
+        "description": "FinchNode hosted Connect sessions and signed FinchNode webhooks",
+    },
     {"name": "assistant", "description": "Stateless natural-language understanding"},
     {"name": "auth", "description": "Patient sessions and identity binding"},
     {"name": "ops", "description": "Metrics and durable jobs drain"},
@@ -115,6 +120,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         human,
         voice,
         relay_webhook,
+        finchnode,
         tools,
         assistant,
         identity,
@@ -122,4 +128,21 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     ):
         app.include_router(module.router)
     install_request_metrics(app)
+    if settings.telephony_mode == "live":
+        _start_call_timers(app.state.container)
     return app
+
+
+def _start_call_timers(container: Container, interval_s: float = 2.0) -> None:
+    """Live calls wait on Telnyx events; this moves a call on when one never comes
+    (voicemail check, playback, AI leg, patient answer). One daemon thread."""
+    import threading
+
+    from .services.job_service import run_call_timers
+
+    def loop() -> None:
+        stop = threading.Event()
+        while not stop.wait(interval_s):
+            run_call_timers(container)
+
+    threading.Thread(target=loop, name="amyna-call-timers", daemon=True).start()

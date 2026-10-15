@@ -26,9 +26,6 @@ describe("signCoreEvent", () => {
 });
 
 describe("verifyPlatformSignature", () => {
-  // The public Standard Webhooks reference-vector key (spec test suite), split
-  // and assembled at runtime so no credential-shaped literal sits in source
-  // (secret-scanning alert #1). Not a real credential.
   const secret = "whsec_" + "MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw";
   const body = '{"event_id":"e1"}';
   const headersFor = (ts: string, sig = signStandardWebhook(secret, "msg_1", ts, body)) => ({
@@ -92,6 +89,31 @@ describe("parsePlatformEvent", () => {
     expect(parsePlatformEvent(envelope("message.sent", "outbound")).kind).toBe("ignored");
     expect(parsePlatformEvent(envelope("chat.typing_indicator.started")).kind).toBe("ignored");
     expect(() => parsePlatformEvent({ event_type: "message.received" })).toThrow(/event_id/);
+  });
+
+  it("reads a dropped pin and a live location share", () => {
+    const pin = parsePlatformEvent({
+      event_type: "message.received",
+      event_id: "evt_pin",
+      data: {
+        direction: "inbound",
+        chat_id: "chat_9",
+        sender_handle: { handle: "ira" },
+        parts: [{ type: "place", latitude: 37.7558, longitude: -122.4048, name: "General Hospital" }],
+      },
+    });
+    expect(pin).toMatchObject({
+      kind: "message",
+      from: "ira",
+      chatId: "chat_9",
+      place: { latitude: 37.7558, longitude: -122.4048, name: "General Hospital" },
+    });
+    const live = parsePlatformEvent({
+      event_type: "location.sharing.started",
+      event_id: "evt_live",
+      data: { chat_id: "chat_9", sender_handle: { handle: "ira" } },
+    });
+    expect(live).toMatchObject({ kind: "location_share", locationShare: "live", chatId: "chat_9" });
   });
 });
 

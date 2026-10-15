@@ -45,14 +45,23 @@ Step-by-step: [`fetch/agentverse/README_AGENTVERSE.md`](../fetch/agentverse/READ
 
 ## 2. FinchNode (Member 4)
 
+FinchNode is read-only: it serves the patient's records, never an itemized bill or an
+insurer phone. One HTTP API for every online mode (the key decides the data):
+
 | Step | Env var / flag |
 |---|---|
-| Keyless synthetic demo API | `FINCHNODE_MODE=demo`. Base URL is `https://api.finchnode.com/demo/v1` when `FINCHNODE_BASE_URL` is empty. No API key. |
-| Sandbox: create a sandbox key (`ck_test_…`) | `FINCHNODE_MODE=sandbox`, `FINCHNODE_API_KEY`, `FINCHNODE_BASE_URL` |
-| Check | `python -m finchnode.client --patient <id>` prints normalized records |
+| Keyless fictional demo (patients type `patient-demo-001`) | `FINCHNODE_MODE=demo` (base `https://api.finchnode.com/demo/v1`, no key) |
+| Sign up at finchnode.com (free), create an application: purpose, categories `demographics, encounters, labs, medications, claims, documents`, sync mode **continuous** | -- |
+| Create a sandbox key (`ck_test_…`, shown once) | `FINCHNODE_MODE=sandbox`, `FINCHNODE_API_KEY` (base defaults to `https://api.finchnode.com/api/v1`) |
+| Set the application's webhook URL to `{PUBLIC_BASE_URL}/finchnode/webhook`; copy the `whsec_…` signing secret | `FINCHNODE_WEBHOOK_SECRET` |
+| Insurer phone (FinchNode has none) | `PAYER_PHONES="Example Health Plan (Synthetic)=+1…"` + `TELEPHONY_ALLOWED_NUMBERS` |
+| Production: complete the app settings (privacy policy URL, retention, webhook URL), create a `ck_live_…` key | `FINCHNODE_MODE=production` |
+| Check | `python scripts/finchnode_sandbox.py records --subject u_…` prints what Core will read |
 
-Core reads FinchNode only through `core/app/adapters/finchnode/*`, and only after a
-`health_data_access` consent on the case.
+Patients link records through FinchNode's hosted **Connect** link (sandbox/production);
+the typed-id path remains for mock/demo. Core reads FinchNode only through
+`core/app/adapters/finchnode/*`, and only after a `health_data_access` consent on the case.
+Walkthrough: [FINCHNODE_SANDBOX_DEMO.md](FINCHNODE_SANDBOX_DEMO.md).
 
 ---
 
@@ -67,28 +76,7 @@ Core reads FinchNode only through `core/app/adapters/finchnode/*`, and only afte
 | Let Core push notifications to the Relay service | `NOTIFY_MODE=relay_service`, `RELAY_SERVICE_URL` |
 | Check | `make relay`, then send "hi" from the Relay app; the service logs the verified event |
 
-For the **whole team** (many Relay accounts, not one laptop/`relaymessenger listen`):
-
-1. **Free (Render, GitHub login, no card):** push this repo, open
-   [Render Blueprints](https://dashboard.render.com/blueprints), apply
-   `render.yaml`. Paste `RELAY_AGENT_TOKEN`, `RELAY_WEBHOOK_SECRET`,
-   `RELAY_API_BASE_URL`, and `XAI_API_KEY` when prompted. Then:
-
-   `python scripts/register_relay_webhook.py --url https://claimshield-sw.onrender.com/webhook/relay`
-
-   Paste the new signing secret into the Render env var and restart.
-   Free web services **sleep after 15 minutes idle** (~1 minute wake).
-   `.github/workflows/keep-alive.yml` pings `/health` every 10 minutes so
-   the first team DM is not dropped. Free Postgres expires after 30 days.
-2. **Always-on (not free):** Fly.io needs a payment method.
-   `python scripts/deploy_fly.py`
-3. Local fallback: Core + Relay +
-   `cloudflared tunnel --url http://localhost:3000`, then register that URL.
-4. Every teammate installs Relay, signs in with **their own** account, and DMs
-   the same agent handle (printed by the script, often `@supreme_waffle`). Each
-   handle gets its own case.
-
-Do **not** run `npx relaymessenger listen` at the same time: those events never reach the team webhook.
+Expose the local service with a tunnel (for example `cloudflared tunnel --url http://localhost:3000`).
 
 ---
 
