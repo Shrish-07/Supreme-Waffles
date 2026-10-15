@@ -67,7 +67,28 @@ Core reads FinchNode only through `core/app/adapters/finchnode/*`, and only afte
 | Let Core push notifications to the Relay service | `NOTIFY_MODE=relay_service`, `RELAY_SERVICE_URL` |
 | Check | `make relay`, then send "hi" from the Relay app; the service logs the verified event |
 
-Expose the local service with a tunnel (for example `cloudflared tunnel --url http://localhost:3000`).
+For the **whole team** (many Relay accounts, not one laptop/`relaymessenger listen`):
+
+1. **Free (Render, GitHub login, no card):** push this repo, open
+   [Render Blueprints](https://dashboard.render.com/blueprints), apply
+   `render.yaml`. Paste `RELAY_AGENT_TOKEN`, `RELAY_WEBHOOK_SECRET`,
+   `RELAY_API_BASE_URL`, and `XAI_API_KEY` when prompted. Then:
+
+   `python scripts/register_relay_webhook.py --url https://claimshield-sw.onrender.com/webhook/relay`
+
+   Paste the new signing secret into the Render env var and restart.
+   Free web services **sleep after 15 minutes idle** (~1 minute wake).
+   `.github/workflows/keep-alive.yml` pings `/health` every 10 minutes so
+   the first team DM is not dropped. Free Postgres expires after 30 days.
+2. **Always-on (not free):** Fly.io needs a payment method.
+   `python scripts/deploy_fly.py`
+3. Local fallback: Core + Relay +
+   `cloudflared tunnel --url http://localhost:3000`, then register that URL.
+4. Every teammate installs Relay, signs in with **their own** account, and DMs
+   the same agent handle (printed by the script, often `@supreme_waffle`). Each
+   handle gets its own case.
+
+Do **not** run `npx relaymessenger listen` at the same time: those events never reach the team webhook.
 
 ---
 
