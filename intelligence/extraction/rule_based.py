@@ -23,6 +23,18 @@ MEDICATIONS: dict[str, str] = {
     "gadolinium": "gadolinium contrast",
     "contrast dye": "gadolinium contrast",
 }
+PROCEDURES: dict[str, str] = {
+    "blood test": "blood test",
+    "blood draw": "blood draw",
+    "lab work": "lab work",
+    "x-ray": "X-ray",
+    "xray": "X-ray",
+    "ct scan": "CT scan",
+    "cat scan": "CT scan",
+    "ultrasound": "ultrasound",
+    "labs": "lab work",
+    "lab": "lab work",
+}
 SERVICES: dict[str, str] = {
     "general anesthesia": "anesthesia",
     "anesthesia": "anesthesia",
@@ -39,12 +51,21 @@ SPEAKER_CONFIDENCE = {
 }
 QUESTION_CONFIDENCE = 0.4
 
-_SENTENCE_SPLIT = re.compile(r"(?<!\bDr)(?<!\bMr)(?<!\bMs)(?<!\bMrs)(?<=[.!?])\s+")
+# The abbreviation guards must include the period: the split position is after it.
+_SENTENCE_SPLIT = re.compile(r"(?<!\bDr\.)(?<!\bMr\.)(?<!\bMs\.)(?<!\bMrs\.)(?<=[.!?])\s+")
 _NEGATION = re.compile(
     r"\b(no|not|without|never|won't|will not|don't|do not|didn't|did not|no need for|"
     r"denies|declined|refused)\b(?:\W+\w+){0,5}\W*$",
     re.IGNORECASE,
 )
+# Reassurances are not negations ("Not to worry, the anesthesiologist is here").
+_REASSURANCE = re.compile(
+    r"\b(?:not to worry|don't worry|do not worry|no worries|no problem|never mind|"
+    r"nothing to worry about|not sure)\b",
+    re.IGNORECASE,
+)
+# A negation only reaches the term inside its own clause ("No IV, just lorazepam").
+_CLAUSE_BREAK = re.compile(r"[,;:]|\s[-\u2013\u2014]\s|\b(?:but|however|instead)\b", re.I)
 _DOSE = re.compile(r"(\d+(?:\.\d+)?)\s*(mg|milligrams?|mcg|micrograms?|ml|milliliters?)\b", re.I)
 _UNITS = {"milligram": "mg", "milligrams": "mg", "microgram": "mcg", "micrograms": "mcg"}
 _UNITS.update({"milliliter": "ml", "milliliters": "ml"})
@@ -61,7 +82,8 @@ def split_sentences(text: str) -> list[str]:
 
 
 def _negated(sentence: str, start: int) -> bool:
-    return bool(_NEGATION.search(sentence[:start]))
+    clause = _CLAUSE_BREAK.split(sentence[:start])[-1]
+    return bool(_NEGATION.search(_REASSURANCE.sub(" ", clause)))
 
 
 def _dose(sentence: str) -> str | None:
@@ -97,6 +119,9 @@ class RuleBasedExtractor:
             for sentence in split_sentences(segment.text.replace("\u2019", "'")):
                 confidence = QUESTION_CONFIDENCE if sentence.rstrip().endswith("?") else base
                 entities.extend(self._imaging(sentence, segment, confidence))
+                entities.extend(
+                    self._terms(sentence, segment, confidence, PROCEDURES, EvidenceKind.PROCEDURE)
+                )
                 entities.extend(
                     self._terms(sentence, segment, confidence, MEDICATIONS, EvidenceKind.MEDICATION)
                 )

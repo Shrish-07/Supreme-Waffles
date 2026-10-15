@@ -12,6 +12,9 @@ from typing import Any, Protocol
 from claimshield_contracts.enums import TurnAction
 from claimshield_contracts.tool_api import DisputeCaseView
 
+RESUME_VERIFIED = "verified"
+RESUME_UNREACHABLE = "unreachable"
+
 
 @dataclass(frozen=True)
 class TurnDecision:
@@ -55,18 +58,32 @@ class VoiceSessionConfig:
     model: str | None = None
     voice: str | None = None
     metadata: dict[str, str] = field(default_factory=dict)
+    # SIP bridge mode (task 15): the xAI-side call id from the inbound
+    # ``realtime.call.incoming`` webhook; when set, the realtime WS attaches with
+    # ``?call_id=...`` instead of starting a fresh ``?model=...`` conversation.
+    bridge_call_id: str | None = None
 
 
 class VoiceAdapter(ABC):
     mode: str
+    # True for SIP-bridged sessions: the WS only starts after the carrier leg
+    # has arrived at the voice vendor and produced an inbound-call webhook.
+    needs_sip_attach: bool = False
 
     @abstractmethod
     def start_session(self, config: VoiceSessionConfig, handler: VoiceEventHandler) -> None:
         """Begin the conversation. Mock runs synchronously until paused or ended."""
 
     @abstractmethod
-    def resume_session(self, call_id: str, handler: VoiceEventHandler) -> None:
-        """Continue after a human resolved the pause."""
+    def resume_session(
+        self, call_id: str, handler: VoiceEventHandler, note: str = RESUME_VERIFIED
+    ) -> None:
+        """Continue after the pause. ``note``: RESUME_VERIFIED (the member handled it)
+        or RESUME_UNREACHABLE (the member could not be connected)."""
+
+    def start_speaking(self, call_id: str) -> None:
+        """The AI leg is now audible to the insurer: greet. Default: no-op."""
+        return None
 
     @abstractmethod
     def pause_session(self, call_id: str) -> None:

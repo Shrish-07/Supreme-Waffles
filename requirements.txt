@@ -1,5 +1,5 @@
 # =============================================================================
-# ClaimShield — complete Python environment (single file, every package needed).
+# Amyna — complete Python environment (single file, every package needed).
 #
 # Install:
 #   python -m venv .venv

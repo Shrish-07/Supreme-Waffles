@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 
 import type { RelayConfig } from "../config";
 import { BUTTONS } from "../ux/messages";
-import type { Button, OutboundMessage, RelayAdapter } from "./types";
+import type { Button, OutboundMessage, RelayAdapter, SharedLocation } from "./types";
 
 const labelKey = (label: string) => label.trim().toLowerCase();
 
@@ -42,18 +42,30 @@ export class LiveRelayAdapter implements RelayAdapter {
     return (await response.json()) as T;
   }
 
+  private async get<T>(path: string): Promise<{ status: number; body: T }> {
+    const response = await this.fetchImpl(`${this.config.relayApiBaseUrl}${path}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${this.config.relayAgentToken}` },
+    });
+    return { status: response.status, body: (await response.json()) as T };
+  }
+
   async sendMessage(to: string, message: OutboundMessage): Promise<{ id: string }> {
     const buttons = message.buttons ?? [];
     const parts: unknown[] = [{ type: "text", value: message.text }];
     if (buttons.length) {
-      parts.push({ type: "buttons", items: buttons.slice(0, 5).map((b) => ({ label: b.label })) });
+      parts.push({
+        type: "buttons",
+        items: buttons.slice(0, 5).map((b) => (b.url ? { label: b.label, url: b.url } : { label: b.label })),
+      });
     }
     const sent = await this.call<{ message: { id: string } }>(
       "/v1/messages",
       { to: [to], message: { parts } },
       randomUUID(),
     );
-    if (buttons.length) this.lastButtons.set(to, buttons);
+    const replies = buttons.filter((b) => !b.url); // a link tap sends nothing back
+    if (replies.length) this.lastButtons.set(to, replies);
     return { id: sent.message.id };
   }
 
@@ -73,5 +85,29 @@ export class LiveRelayAdapter implements RelayAdapter {
     const response = await this.fetchImpl(url);
     if (!response.ok) throw new Error(`recording download failed: ${response.status}`);
     return new Uint8Array(await response.arrayBuffer());
+  }
+
+  async requestLocation(chatId: string): Promise<"sent" | "already_sharing" | "unavailable"> {
+    const response = await this.fetchImpl(
+      `${this.config.relayApiBaseUrl}/v1/chats/${chatId}/location/request`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.config.relayAgentToken}` },
+      },
+    );
+    if (response.status === 409) return "already_sharing";
+    if (response.status === 429 || response.status === 404) return "unavailable";
+    if (!response.ok) throw new Error(`Relay API location request failed: ${response.status}`);
+    return "sent";
+  }
+
+  async readLocation(chatId: string): Promise<SharedLocation | undefined> {
+    const { status, body } = await this.get<{
+      data?: { features?: { geometry?: { coordinates?: number[] } }[] };
+    }>(`/v1/chats/${chatId}/location`);
+    if (status !== 200) return undefined;
+    const coords = body.data?.features?.[0]?.geometry?.coordinates;
+    if (!coords || coords.length < 2) return undefined;
+    return { longitude: coords[0]!, latitude: coords[1]! };
   }
 }

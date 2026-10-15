@@ -203,7 +203,7 @@ def test_full_workflow_over_uagents(agent_env: None, live_core: dict[str, Any]) 
     def build() -> tuple[list[Agent], str]:
         bureau = build_bureau(settings, online=False)
         agents = list(bureau._agents)  # noqa: SLF001 - reuse the configured agents
-        orchestrator = next(a for a in agents if a.name == "claimshield-orchestrator")
+        orchestrator = next(a for a in agents if a.name == "amyna-orchestrator")
         return agents, orchestrator.address
 
     state = _converse(

@@ -67,18 +67,20 @@ AGENT_LABELS = {
 }
 DISPUTABLE = (FindingStatus.CONFIRMED, FindingStatus.NEEDS_CLARIFICATION)
 CONSENT_TEXT = (
-    "I allow ClaimShield to read my FinchNode health records (encounters, procedures, "
+    "I allow Amyna to read my FinchNode health records (encounters, procedures, "
     "medications and claims) to review this bill."
 )
 WELCOME = (
-    "Hi! I'm **ClaimShield**. I compare your medical bill with your patient-authorized health "
-    "records and your visit recording, flag possible billing errors, and help you dispute them.\n\n"
-    "To start, send your **FinchNode patient ID** and the **claim number** "
-    "(for example `fn_pat_demo_001` and `CLM-2026-0915-001`)."
+    "Hi! I'm **Amyna**. I check medical bills against your health records and help fix "
+    "billing mistakes.\n\nTell me what's going on in your own words -- for example "
+    '*"this bill looks wrong"*. If you have them handy, I can also use your record '
+    "code (it starts with `fn_pat_`) and the claim number from the bill (starts with "
+    "`CLM-`) to look things up right away."
 )
 HELP_TEXT = (
-    "Send your FinchNode patient ID and claim number to start. Answer questions with "
-    "**YES / NO / NOT SURE**. Commands: STATUS, RESTART, HELP. ClaimShield never asks for "
+    "Tell me about the bill in plain words, or send your record code (`fn_pat_...`) "
+    "with the claim number (`CLM-...`) from the bill. Answer my questions with "
+    "**YES / NO / NOT SURE**. Commands: STATUS, RESTART, HELP. Amyna never asks for "
     "your SSN, PINs or passwords."
 )
 
@@ -95,8 +97,8 @@ def _patient_reply(text: str) -> str:
 def authorization_prompt(payer: str, total_cents: int) -> str:
     """Exact wording the patient approves; stored with the approval decision."""
     return (
-        f"If you approve, you authorize ClaimShield to call {payer} on your behalf about "
-        f"these {money(total_cents)} in charges. ClaimShield will never share your SSN, PINs "
+        f"If you approve, you authorize Amyna to call {payer} on your behalf about "
+        f"these {money(total_cents)} in charges. Amyna will never share your SSN, PINs "
         "or passwords; if the representative asks, the call pauses and you verify directly."
     )
 
@@ -237,7 +239,7 @@ class ChatOrchestrator:
     def _failed(self, session: ChatSession, exc: CoreToolError) -> Step:
         session.stage = Stage.ERROR
         return Step(
-            [f"Sorry, ClaimShield Core said: {exc.message} ({exc.code}). Reply STATUS or RESTART."]
+            [f"Sorry, Amyna Core said: {exc.message} ({exc.code}). Reply STATUS or RESTART."]
         )
 
     @staticmethod
@@ -283,7 +285,7 @@ class ChatOrchestrator:
             session.stage = Stage.DONE  # never review (or dispute) a different claim
             return Step(
                 [
-                    f"Your open ClaimShield case covers claim {case.claim.external_claim_id}, "
+                    f"Your open Amyna case covers claim {case.claim.external_claim_id}, "
                     f"not {session.external_claim_id}. Reply RESTART and send that claim number."
                 ]
             )
@@ -567,7 +569,7 @@ class ChatOrchestrator:
             [
                 "I'm on the line with your insurer. "
                 f"{prompt or 'The representative needs you.'}\n\n"
-                "ClaimShield never shares SSNs, PINs or passwords, so **the call is paused**. "
+                "Amyna never shares SSNs, PINs or passwords, so **the call is paused**. "
                 "Please verify directly with the representative (we also sent you a notification), "
                 "then reply **DONE**, or CANCEL to end the call."
             ]
@@ -642,7 +644,10 @@ class ChatOrchestrator:
 
     def _status(self, session: ChatSession) -> str:
         if not session.case_id:
-            return "No bill under review yet. Send your FinchNode patient ID and claim number."
+            return (
+                "No bill under review yet. Send me your record code (`fn_pat_...`) and "
+                "the claim number (`CLM-...`) from the bill, or just tell me what happened."
+            )
         case = self._case(session)
         flagged = sum(f.amount_cents for f in case.findings)
         return (

@@ -16,6 +16,7 @@ from .enums import (
     Actor,
     AgentName,
     AgentRunStatus,
+    CallMergePhase,
     CallSpeaker,
     CallStatus,
     CaseState,
@@ -34,6 +35,7 @@ from .enums import (
     InterventionStatus,
     IssueType,
     LineMatchStatus,
+    LinkStatus,
     MatchMethod,
     NotificationKind,
     PatientAnswer,
@@ -113,6 +115,10 @@ class Case(ContractModel):
     channel: Channel
     patient: PatientRef
     external_ref: str | None = None
+    #: Masked patient callback number for the human merge (None = not given yet).
+    callback_phone_masked: str | None = None
+    #: False while the patient is still linking records through FinchNode Connect.
+    records_linked: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -285,6 +291,10 @@ class DisputeCandidate(ContractModel):
     issue_type: IssueType
     title: str
     explanation: str
+    # Plain-English wording for the patient (task 12). Falls back to
+    # ``explanation`` when None; the language layer may never invent facts,
+    # it can only restate this and the evidence refs.
+    patient_facing_explanation: str | None = None
     amount_cents: int
     confidence: float = Field(ge=0.0, le=1.0)
     human_confirmation_required: bool
@@ -361,6 +371,30 @@ class Dispute(ContractModel):
     patient_authorization_id: str | None = None
     rejected_reason: str | None = None
     created_at: datetime
+
+
+# --------------------------------------------------------------------- identity
+
+
+class UserAccount(ContractModel):
+    """An authenticated Amyna account. Cases belong to users, not to typed IDs."""
+
+    user_id: str
+    auth_subject: str
+    display_name: str | None = None
+    created_at: datetime
+
+
+class FinchLink(ContractModel):
+    """A user's authorized connection to a FinchNode patient identity (§5)."""
+
+    link_id: str
+    user_id: str
+    finchnode_patient_id: str  # an identifier, never a credential
+    status: LinkStatus
+    created_at: datetime
+    revoked_at: datetime | None = None
+
     approved_at: datetime | None = None
 
 
@@ -389,6 +423,8 @@ class CallSession(ContractModel):
     case_id: str
     dispute_id: str
     status: CallStatus
+    # First-class 17A human-merge lifecycle (None until a sensitive request).
+    merge_phase: CallMergePhase | None = None
     provider_call_ref: str | None = None
     to_number_masked: str | None = None
     turns: list[CallTurn] = Field(default_factory=list)

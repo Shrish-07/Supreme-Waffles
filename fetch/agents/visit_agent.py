@@ -35,7 +35,7 @@ def build_visit_agent(
         )
     )
     return build_specialist(
-        name="claimshield-visit-agent",
+        name="amyna-visit-agent",
         agent_name=AgentName.VISIT_AGENT,
         seed_env="VISIT_AGENT_SEED",
         port=PORT,

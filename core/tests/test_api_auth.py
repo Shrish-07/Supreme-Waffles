@@ -88,4 +88,4 @@ def test_per_agent_allowlist(
 
 
 def test_responses_carry_contract_version(client: TestClient) -> None:
-    assert client.get("/health").headers["X-ClaimShield-Contracts-Version"]
+    assert client.get("/health").headers["X-Amyna-Contracts-Version"]

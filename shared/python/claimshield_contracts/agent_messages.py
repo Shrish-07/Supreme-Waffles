@@ -1,4 +1,4 @@
-"""Typed uAgents messages exchanged between ClaimShield Fetch agents.
+"""Typed uAgents messages exchanged between Amyna Fetch agents.
 
 uagents 0.25.x ``Model`` is built on ``pydantic.v1.BaseModel`` (decision D1 in
 docs/ARCHITECTURE.md). Therefore:

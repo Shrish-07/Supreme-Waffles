@@ -1,5 +1,5 @@
 /** RELAY_MODE=mock: in-memory outbox + console output. No Relay account needed. */
-import type { OutboundMessage, RelayAdapter } from "./types";
+import type { OutboundMessage, RelayAdapter, SharedLocation } from "./types";
 
 export interface SentMessage {
   to: string;
@@ -9,6 +9,11 @@ export interface SentMessage {
 export class MockRelayAdapter implements RelayAdapter {
   readonly mode = "mock" as const;
   readonly outbox: SentMessage[] = [];
+  readonly locationRequests: string[] = [];
+  /** Test hook: coordinates returned by readLocation. */
+  sharedLocation: SharedLocation | undefined;
+  /** Test hook: what the location request API returns. */
+  locationResult: "sent" | "already_sharing" | "unavailable" = "sent";
   private counter = 0;
 
   constructor(
@@ -19,7 +24,7 @@ export class MockRelayAdapter implements RelayAdapter {
   async sendMessage(to: string, message: OutboundMessage): Promise<{ id: string }> {
     this.outbox.push({ to, message });
     if (this.print) {
-      const buttons = message.buttons?.map((b) => `[${b.label}]`).join(" ") ?? "";
+      const buttons = message.buttons?.map((b) => (b.url ? `[${b.label} -> ${b.url}]` : `[${b.label}]`)).join(" ") ?? "";
       console.log(`\nrelay -> ${to}:\n${message.text}${buttons ? `\n${buttons}` : ""}`);
     }
     this.counter += 1;
@@ -33,5 +38,14 @@ export class MockRelayAdapter implements RelayAdapter {
 
   async fetchRecording(): Promise<Uint8Array> {
     return new Uint8Array();
+  }
+
+  async requestLocation(chatId: string): Promise<"sent" | "already_sharing" | "unavailable"> {
+    this.locationRequests.push(chatId);
+    return this.locationResult;
+  }
+
+  async readLocation(): Promise<SharedLocation | undefined> {
+    return this.sharedLocation;
   }
 }

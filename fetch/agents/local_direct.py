@@ -30,7 +30,7 @@ from .session import ChatSession, MemoryStore, load_session, save_session
 from .settings import AgentSettings
 
 DEMO_CONVERSATION = (
-    "Hi ClaimShield, can you review my bill? My FinchNode patient ID is fn_pat_demo_001 "
+    "Hi Amyna, can you review my bill? My FinchNode patient ID is fn_pat_demo_001 "
     "and the claim is CLM-2026-0915-001.",
     "Yes",
     "No",
@@ -113,11 +113,11 @@ class LocalDirectRunner:
 
 def _print(replies: list[str]) -> None:
     for reply in replies:
-        print("\nclaimshield>", reply.replace("\n", "\n             "))
+        print("\nAmyna>", reply.replace("\n", "\n             "))
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Chat with ClaimShield locally (no Agentverse)")
+    parser = argparse.ArgumentParser(description="Chat with Amyna locally (no Agentverse)")
     parser.add_argument("--script", choices=["demo"], help="run the canned demo conversation")
     args = parser.parse_args()
     runner = LocalDirectRunner()
@@ -126,7 +126,7 @@ def main() -> None:
             print(f"\nyou> {text}")
             _print(runner.send(text))
         return
-    print("ClaimShield local chat (Ctrl-D to exit). Try:", DEMO_CONVERSATION[0])
+    print("Amyna local chat (Ctrl-D to exit). Try:", DEMO_CONVERSATION[0])
     while True:
         try:
             text = input("\nyou> ").strip()

@@ -50,7 +50,8 @@ def test_log_filter_redacts_messages() -> None:
 
 def _settings(**overrides: object) -> Settings:
     with clean_env():  # a configured developer .env must never leak into these checks
-        return Settings(_env_file=None, app_env="test", **overrides)  # type: ignore[arg-type]
+        app_env = overrides.pop("app_env", "test")
+        return Settings(_env_file=None, app_env=app_env, **overrides)  # type: ignore[arg-type]
 
 
 def test_default_settings_are_all_mock_and_valid() -> None:
@@ -73,6 +74,22 @@ def test_live_modes_fail_fast_naming_the_variable(overrides: dict, missing: str)
     settings = Settings(_env_file=None, **{"app_env": "test", **overrides})  # type: ignore[arg-type]
     with pytest.raises(ConfigError, match=missing):
         settings.validate_for_startup()
+
+
+def test_one_configured_line_is_used_when_the_payer_name_differs() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="test",
+        payer_phones="Example Health Plan (Synthetic)=+12243784400",
+    )
+    assert settings.payer_phone_for("Medicare") == "+12243784400"
+    assert settings.payer_phone_for("Example Health Plan (Synthetic)") == "+12243784400"
+    two = Settings(
+        _env_file=None,
+        app_env="test",
+        payer_phones="Blue Plan=+15555550100;Red Plan=+15555550101",
+    )
+    assert two.payer_phone_for("Medicare") is None
 
 
 def test_dev_fallback_tokens_only_outside_prod() -> None:
@@ -110,3 +127,133 @@ def test_a_partial_telnyx_fallback_profile_is_named() -> None:
     )  # TELNYX_CONNECTION_ID_2 missing
     with pytest.raises(ConfigError, match="TELNYX_CONNECTION_ID_2"):
         settings.validate_for_startup()
+
+
+# ---------------------------------------------------------------------------
+# environment_mistakes: staging/production run fail-closed, never on mock adapters
+# ---------------------------------------------------------------------------
+
+
+def _live_overrides(app_env: str, finchnode_mode: str) -> dict[str, object]:
+    """A minimally complete live configuration for `app_env` (all live adapters)."""
+    return {
+        "app_env": app_env,
+        "database_url": "postgresql+psycopg://amyna:amyna_dev@db:5432/amyna",
+        "public_base_url": "https://core.amyna.example.com",
+        "notify_mode": "relay_service",
+        "relay_service_url": "https://relay.amyna.example.com",
+        "fetch_mode": "agentverse",
+        "orchestrator_url": "https://agents.amyna.example.com",
+        "xai_voice_mode": "live",
+        "xai_api_key": "xai-test",
+        "telephony_mode": "live",
+        "telnyx_api_key": "KEY",
+        "telnyx_connection_id": "conn",
+        "telnyx_phone_number": "+15555550100",
+        "telnyx_public_key": "pubkey",
+        "telnyx_webhook_verify": True,
+        "xai_sip_uri": "sip:test@sip.x.ai",
+        "xai_webhook_signing_secret": "whsec_test",  # SIP attach mode requires the secret
+        "finchnode_mode": finchnode_mode,
+        "finchnode_api_key": "ck_live" if finchnode_mode == "production" else "ck_test_x",
+        "finchnode_base_url": "" if finchnode_mode == "production" else "https://sandbox.example",
+        "finchnode_webhook_secret": "whsec_finchnode_test",
+        "relay_service_token": "r",
+        "fetch_service_token": "f",
+        "voice_service_token": "v",
+        "core_webhook_secret": "w",
+    }
+
+
+def test_dev_and_test_allow_mock_adapters() -> None:
+    for env in ("dev", "test"):
+        settings = _settings(app_env=env)
+        assert settings.environment_mistakes() == []
+        settings.validate_for_startup()  # no fail-closed enforcement outside staging/prod
+
+
+@pytest.mark.parametrize(
+    ("app_env", "finchnode_mode"), [("staging", "sandbox"), ("prod", "production")]
+)
+def test_a_fully_configured_env_has_no_mistakes(app_env: str, finchnode_mode: str) -> None:
+    settings = _settings(**_live_overrides(app_env, finchnode_mode))
+    assert settings.environment_mistakes() == []
+    settings.validate_for_startup()
+
+
+@pytest.mark.parametrize("app_env", ["staging", "prod"])
+def test_env_requires_postgres_and_https_and_tokens(app_env: str) -> None:
+    baseline = _live_overrides(app_env, "sandbox" if app_env == "staging" else "production")
+    settings = _settings(**{**baseline, "database_url": ""})  # silent SQLite fallback
+    assert any("PostgreSQL DATABASE_URL" in m for m in settings.environment_mistakes())
+    settings = _settings(**{**baseline, "public_base_url": "http://localhost:8080"})
+    assert any("https" in m for m in settings.environment_mistakes())
+    settings = _settings(**{**baseline, "relay_service_token": "", "fetch_service_token": ""})
+    assert any("SERVICE_TOKEN" in m for m in settings.environment_mistakes())
+
+
+@pytest.mark.parametrize("app_env", ["staging", "prod"])
+def test_env_refuses_mock_integrations(app_env: str) -> None:
+    baseline = _live_overrides(app_env, "sandbox" if app_env == "staging" else "production")
+    for flag, value, needle in (
+        ("notify_mode", "outbox", "NOTIFY_MODE=relay_service"),
+        ("fetch_mode", "local_direct", "FETCH_MODE=agentverse"),
+        ("xai_voice_mode", "mock", "XAI_VOICE_MODE=live"),
+        ("telephony_mode", "mock", "TELEPHONY_MODE=live"),
+    ):
+        settings = _settings(**{**baseline, flag: value})
+        assert any(needle in m for m in settings.environment_mistakes())
+
+
+@pytest.mark.parametrize("app_env", ["staging", "prod"])
+def test_env_forces_telnyx_webhook_verification(app_env: str) -> None:
+    baseline = _live_overrides(app_env, "sandbox" if app_env == "staging" else "production")
+    settings = _settings(**{**baseline, "telnyx_webhook_verify": False})
+    assert any("TELNYX_WEBHOOK_VERIFY" in m for m in settings.environment_mistakes())
+    settings = _settings(**{**baseline, "telnyx_public_key": ""})
+    assert any("TELNYX_PUBLIC_KEY" in m for m in settings.environment_mistakes())
+
+
+@pytest.mark.parametrize(
+    ("app_env", "expected", "wrong"),
+    [("staging", "sandbox", "production"), ("prod", "production", "sandbox")],
+)
+def test_env_requires_the_right_finchnode_mode(app_env: str, expected: str, wrong: str) -> None:
+    baseline = _live_overrides(app_env, expected)
+    settings = _settings(**{**baseline, "finchnode_mode": wrong})
+    assert any(f"FINCHNODE_MODE={expected}" in m for m in settings.environment_mistakes())
+
+
+def test_production_refuses_a_tunnel_public_url() -> None:
+    baseline = _live_overrides("prod", "production")
+    settings = _settings(**{**baseline, "public_base_url": "https://x.ngrok-free.dev"})
+    assert any("tunnel" in m for m in settings.environment_mistakes())
+    staging = _settings(**_live_overrides("staging", "sandbox"))
+    assert any("tunnel" in m for m in staging.environment_mistakes()) is False
+
+
+def test_uvicorn_access_lines_are_redacted_not_broken() -> None:
+    """Regression: clearing record.args broke uvicorn's AccessFormatter on every request."""
+    import io
+    import logging
+
+    from uvicorn.logging import AccessFormatter
+
+    from app.audit import PhiRedactingFilter
+
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s'))
+    handler.addFilter(PhiRedactingFilter())
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:5000", "GET", "/cases/x?email=jane@example.com", "1.1", 200),
+        None,
+    )
+    handler.handle(record)
+    line = stream.getvalue()
+    assert "GET /cases/x" in line and "200" in line and "jane@example.com" not in line

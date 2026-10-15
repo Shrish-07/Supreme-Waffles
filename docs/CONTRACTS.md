@@ -15,7 +15,7 @@ Generated artifacts: `shared/openapi/core.openapi.json` (`make openapi`) and
 | `version.py` | `CONTRACTS_VERSION`, `AGENT_PROTOCOL_VERSION` |
 
 Conventions: money = integer cents; ids = prefixed strings (`case_…`, `fnd_…`, `hin_…`);
-timestamps = ISO-8601 UTC; every response carries `X-ClaimShield-Contracts-Version`.
+timestamps = ISO-8601 UTC; every response carries `X-Amyna-Contracts-Version`.
 
 ## 1. Authentication
 
@@ -57,6 +57,15 @@ timestamps = ISO-8601 UTC; every response carries `X-ClaimShield-Contracts-Versi
 | POST | `/voice/{call_id}/event` | `voice:events` | `VoiceEventIn` → `VoiceEventResult` |
 | POST | `/voice/{call_id}/human-handoff` | `voice:handoff` | `HandoffIn` → `HumanIntervention` (201) |
 | POST | `/relay/webhook` | HMAC | `RelayWebhookEvent` → `RelayWebhookResult` · idempotent by `event_id` |
+| POST | `/auth/session` | `sessions:issue` | `AuthSessionCreate` → `AuthSessionResult` (201) · `relay:<handle>` in any env; other subjects dev/test/staging only |
+| GET | `/cases/{case_id}/finchnode/claims` | `cases:read` | → `FinchNodeClaims` (bill summaries; `itemized=false` → upload the itemized bill) |
+| PUT | `/cases/{case_id}/callback-phone` | `cases:write` | `CallbackPhoneIn` → `Case` · the patient's own number for the handoff leg |
+| POST | `/finchnode/connect-sessions` | `cases:write` | `FinchNodeConnectCreate` → `FinchNodeConnectSession` (201) · 409 `connect_unavailable` in mock/demo |
+| GET | `/finchnode/connect-sessions/{id}` | `cases:read` | → `FinchNodeConnectSession` · reads FinchNode back and finishes linking |
+| POST | `/finchnode/webhook` | FinchNode signature | FinchNode event → 204 (200 duplicate) · `consent.granted`, `records.updated`, `consent.revoked`… |
+
+Relay-originated calls on a user-owned case must forward that patient's
+`X-Amyna-Patient-Token` on every route above (not only `/cases/*`).
 
 Interactive docs: http://localhost:8080/docs (Authorize with a service token).
 
@@ -134,8 +143,8 @@ All are idempotent: they return already-recorded evidence, findings or disputes 
 ## 6. Signed Relay events (`POST /relay/webhook`)
 
 ```
-X-ClaimShield-Timestamp: <unix seconds>
-X-ClaimShield-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "<timestamp>.<raw body>")>
+X-Amyna-Timestamp: <unix seconds>
+X-Amyna-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, "<timestamp>.<raw body>")>
 ```
 
 Requests more than 300 s old are rejected. `event_id` is processed at most once (a duplicate

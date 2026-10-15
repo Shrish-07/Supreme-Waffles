@@ -30,7 +30,7 @@ def build_dispute_agent(
 ) -> Agent:
     settings = settings or AgentSettings.from_env()
     return build_specialist(
-        name="claimshield-dispute-agent",
+        name="amyna-dispute-agent",
         agent_name=AgentName.DISPUTE_AGENT,
         seed_env="DISPUTE_AGENT_SEED",
         port=PORT,

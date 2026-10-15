@@ -30,8 +30,10 @@ from claimshield_contracts.models import (
     Dispute as DisputeModel,
 )
 
+from .audit import mask_phone
 from .db import as_utc
 from .models_db import (
+    PENDING_CONNECT_PREFIX,
     AgentRunRow,
     CallRow,
     CaseRow,
@@ -73,6 +75,8 @@ def case_to_model(row: CaseRow) -> Case:
             state=row.patient_state,
         ),
         external_ref=row.external_ref,
+        callback_phone_masked=mask_phone(row.patient_phone),
+        records_linked=not row.finchnode_patient_id.startswith(PENDING_CONNECT_PREFIX),
         created_at=as_utc(row.created_at),
         updated_at=as_utc(row.updated_at),
     )
@@ -195,6 +199,7 @@ def finding_to_model(row: FindingRow) -> DisputeCandidate:
         issue_type=row.issue_type,
         title=row.title,
         explanation=row.explanation,
+        patient_facing_explanation=row.patient_facing_explanation,
         amount_cents=row.amount_cents,
         confidence=row.confidence,
         human_confirmation_required=row.human_confirmation_required,
@@ -267,6 +272,7 @@ def call_to_model(row: CallRow) -> CallSession:
         case_id=row.case_id,
         dispute_id=row.dispute_id,
         status=row.status,
+        merge_phase=row.merge_phase,
         provider_call_ref=row.provider_call_ref,
         to_number_masked=row.to_number_masked,
         turns=row.turns,

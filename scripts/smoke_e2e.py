@@ -99,7 +99,7 @@ def chat_leg(base_url: str, settings: Settings) -> str:
 
 
 def run(base_url: str, settings: Settings, *, chat: bool) -> None:
-    print(f"ClaimShield smoke test (mock mode) against {base_url}")
+    print(f"Amyna smoke test (mock mode) against {base_url}")
     print("Part 1: Relay path through the public API")
     summary = run_demo_flow(
         httpx.Client(base_url=base_url, timeout=60), settings, log=lambda m: print(f"  ok {m}")

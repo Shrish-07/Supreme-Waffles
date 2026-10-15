@@ -1,4 +1,4 @@
-"""Launch all four ClaimShield agents.
+"""Launch all four Amyna agents.
 
 Two ways (document both, pick one):
 
@@ -80,7 +80,7 @@ def run_processes() -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the ClaimShield Fetch agents")
+    parser = argparse.ArgumentParser(description="Run the Amyna Fetch agents")
     parser.add_argument("--processes", action="store_true", help="one OS process per agent")
     args = parser.parse_args()
     if args.processes:

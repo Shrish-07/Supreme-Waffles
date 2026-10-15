@@ -17,12 +17,27 @@ from .audit import configure_logging
 from .config import Settings, get_settings
 from .container import Container, build_container
 from .errors import DomainError
-from .routers import cases, claims, disputes, health, human, relay_webhook, tools, visits, voice
+from .observability import install_request_metrics
+from .routers import (
+    assistant,
+    cases,
+    claims,
+    disputes,
+    finchnode,
+    health,
+    human,
+    identity,
+    ops,
+    relay_webhook,
+    tools,
+    visits,
+    voice,
+)
 
 log = logging.getLogger("claimshield.core")
 
 DESCRIPTION = """
-ClaimShield Core owns the case (single source of truth).
+Amyna Core owns the case (single source of truth).
 
 * **Public API** — used by the Relay service and other clients (Bearer service token).
 * **/internal/tools/** — used by Fetch agents and the voice manager; scoped per caller.
@@ -41,6 +56,13 @@ TAGS = [
     {"name": "human", "description": "Human-in-the-loop questions and handoffs"},
     {"name": "voice", "description": "Insurer calls (Core owns the session)"},
     {"name": "relay", "description": "Signed events from the Relay service"},
+    {
+        "name": "finchnode",
+        "description": "FinchNode hosted Connect sessions and signed FinchNode webhooks",
+    },
+    {"name": "assistant", "description": "Stateless natural-language understanding"},
+    {"name": "auth", "description": "Patient sessions and identity binding"},
+    {"name": "ops", "description": "Metrics and durable jobs drain"},
     {"name": "internal-tools", "description": "Agent + voice tools (scoped service tokens)"},
     {"name": "health", "description": "Liveness and configured modes"},
 ]
@@ -73,7 +95,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         log.warning("%s is empty; using the built-in development value", name)
 
     app = FastAPI(
-        title="ClaimShield Core",
+        title="Amyna Core",
         version=__version__,
         description=DESCRIPTION,
         openapi_tags=TAGS,
@@ -86,9 +108,41 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     @app.middleware("http")
     async def _contracts_header(request: Request, call_next):  # type: ignore[no-untyped-def]
         response = await call_next(request)
-        response.headers["X-ClaimShield-Contracts-Version"] = CONTRACTS_VERSION
+        response.headers["X-Amyna-Contracts-Version"] = CONTRACTS_VERSION
         return response
 
-    for module in (health, cases, visits, claims, disputes, human, voice, relay_webhook, tools):
+    for module in (
+        health,
+        cases,
+        visits,
+        claims,
+        disputes,
+        human,
+        voice,
+        relay_webhook,
+        finchnode,
+        tools,
+        assistant,
+        identity,
+        ops,
+    ):
         app.include_router(module.router)
+    install_request_metrics(app)
+    if settings.telephony_mode == "live":
+        _start_call_timers(app.state.container)
     return app
+
+
+def _start_call_timers(container: Container, interval_s: float = 2.0) -> None:
+    """Live calls wait on Telnyx events; this moves a call on when one never comes
+    (voicemail check, playback, AI leg, patient answer). One daemon thread."""
+    import threading
+
+    from .services.job_service import run_call_timers
+
+    def loop() -> None:
+        stop = threading.Event()
+        while not stop.wait(interval_s):
+            run_call_timers(container)
+
+    threading.Thread(target=loop, name="amyna-call-timers", daemon=True).start()

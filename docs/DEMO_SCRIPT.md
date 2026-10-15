@@ -41,14 +41,15 @@ running with `make seed`, and `make agents` running with `FETCH_MODE=agentverse`
 
 Offline rehearsal of the exact same conversation (no Agentverse): `make chat`.
 
-| You type in ASI:One | ClaimShield replies (abridged) |
+| You type in ASI:One | Amyna replies (abridged) |
 |---|---|
-| "Hi ClaimShield, can you review my bill? My FinchNode patient ID is fn_pat_demo_001 and the claim is CLM-2026-0915-001." | Ack + "To review your bill I need your permission to read your FinchNode health records for this case. Reply YES to consent." |
+| "Hi Amyna, I think this hospital bill is wrong." | Ack + plain-English reply ("I can look into it..."), guidance to share the record code or claim number |
+| "My patient ID is fn_pat_demo_001 and the claim is CLM-2026-0915-001." | Ack + "To review your bill I need your permission to read your FinchNode health records for this case. Reply YES to consent." |
 | "Yes" | "Thanks — checking your visit evidence and claim…" → "Visit evidence: MRI brain with contrast; lorazepam 1 mg IV." → summary of **3 potential issues** ($1,070.00) → "**Did you receive anesthesia during your visit on 2026-09-15?** Reply YES, NO, or NOT SURE." |
 | "No" | Next question: "Your bill includes a $40.00 charge for an unspecified drug. Other than lorazepam and gadolinium contrast, did you receive any other medication during your visit on September 15, 2026?" |
 | "Not sure" | "Items to dispute: … Prepare a dispute package? (YES/NO)" |
-| "Yes" | Dispute package summary with policy citations → "Reply **APPROVE** to approve the dispute and authorize ClaimShield to call Acme Health Plan for you, or REJECT." |
-| "APPROVE" | "Calling Acme Health Plan…" → "The representative asked for the member's **Social Security number**. ClaimShield never shares that, so I paused the call. Please verify directly with the representative, then reply DONE." |
+| "Yes" | Dispute package summary with policy citations → "Reply **APPROVE** to approve the dispute and authorize Amyna to call Acme Health Plan for you, or REJECT." |
+| "APPROVE" | "Calling Acme Health Plan…" → "The representative asked for the member's **Social Security number**. Amyna never shares that, so I paused the call. Please verify directly with the representative, then reply DONE." |
 | "Done" | "✅ Resolved. The insurer will remove $780.00 (anesthesia) and $250.00 (duplicate facility fee) and request itemization for $40.00. Reference MOCK-REF-48213." |
 
 Talking points: only the orchestrator is public; all inter-agent traffic is typed
@@ -56,7 +57,7 @@ Talking points: only the orchestrator is public; all inter-agent traffic is type
 the DB — they call Core tools; the call itself is owned by Core.
 
 **First validate discoverability:** `make agents-hello` (HELLO_WORLD=1) and confirm ASI:One
-replies "Hello from ClaimShield".
+replies "Hello from Amyna".
 
 ## Demo 2 — Relay patient experience (Relay track)
 
@@ -69,7 +70,7 @@ adapter) against Core and prints what the patient would see:
 3. **Review my bill** → "Which bill? Send the claim number" → `CLM-2026-0915-001` → claim pulled from FinchNode → analysis.
 4. Question card: "Did you receive anesthesia…?" **[YES] [NO] [NOT SURE]** (one at a time).
 5. Approval card: total, items, letter preview → **[Review] [Approve] [Reject]**.
-6. During the call: handoff card "The insurer is asking for identity verification. ClaimShield never shares your SSN…" **[Done] [Cancel call]**.
+6. During the call: handoff card "The insurer is asking for identity verification. Amyna never shares your SSN…" **[Done] [Cancel call]**.
 7. Final status + case summary with the reference number.
 
 Questions, the approval card and the handoff card are Core notifications rendered by the Relay

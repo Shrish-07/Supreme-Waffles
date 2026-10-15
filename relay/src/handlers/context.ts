@@ -1,6 +1,7 @@
 /** Everything a handler needs. Built once in index.ts (or by demo.ts / tests). */
 import type { RelayConfig } from "../config";
 import type { CoreClient } from "../coreClient";
+import type { NearbyHospital } from "../places/hospitals";
 import type { RelayAdapter, OutboundMessage } from "../relayAdapter/types";
 import type { Conversation, ConversationStore } from "../store";
 import type { Transcriber } from "./transcription";
@@ -8,13 +9,36 @@ import type { Transcriber } from "./transcription";
 /** Public surface of CoreClient (lets tests pass a stub). */
 export type CoreApi = Pick<CoreClient, keyof CoreClient>;
 
+export type HospitalFinder = (
+  latitude: number,
+  longitude: number,
+) => Promise<NearbyHospital | undefined>;
+
 export interface HandlerContext {
   config: RelayConfig;
   core: CoreApi;
   relay: RelayAdapter;
   store: ConversationStore;
   transcriber: Transcriber;
+  findHospital: HospitalFinder;
+  /** Patient session tokens by platform user id (memory only; never persisted). */
+  patientTokens: Map<string, string>;
   log: (message: string) => void;
+}
+
+/**
+ * Resolve the Core client scoped to this patient: cases created with it belong
+ * to the authenticated identity. Amyna's session = the identity binding; a
+ * typed patient ID is never a credential (task 19).
+ */
+export async function patientScope(ctx: HandlerContext, from: string): Promise<CoreApi> {
+  let token = ctx.patientTokens.get(from);
+  if (!token) {
+    const session = await ctx.core.startAuthSession({ subject: `relay:${from}` });
+    token = session.patient_token;
+    ctx.patientTokens.set(from, token);
+  }
+  return ctx.core.withPatientToken(token);
 }
 
 export async function say(

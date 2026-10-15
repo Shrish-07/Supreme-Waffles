@@ -135,6 +135,52 @@ class ClaimIngest(InputModel):
         return self
 
 
+class FinchNodeClaimSummary(ContractModel):
+    """One bill on the patient's FinchNode records (to let the patient pick it)."""
+
+    external_claim_id: str
+    provider_name: str | None = None
+    payer_name: str | None = None
+    date_of_service: date
+    total_billed_cents: int
+    #: FinchNode claim records carry no line items; such a bill needs the itemized
+    #: statement uploaded (source=upload) before it can be checked.
+    itemized: bool
+
+
+class FinchNodeClaims(ContractModel):
+    claims: list[FinchNodeClaimSummary]
+    #: False when FinchNode could not load the claims category completely.
+    complete: bool = True
+    gap: str | None = None
+
+
+class FinchNodeConnectCreate(InputModel):
+    """Start (or restart) linking a patient's health records through FinchNode Connect.
+
+    Without ``case_id`` Core opens a new case for the signed-in patient; it gets its
+    FinchNode identity when the patient finishes Connect."""
+
+    case_id: str | None = None
+    return_url: str | None = Field(default=None, max_length=2048)
+
+
+class FinchNodeConnectSession(ContractModel):
+    session_id: str
+    case_id: str
+    #: Send the patient here (FinchNode's hosted consent pages). Expires after 24 h.
+    url: str
+    status: str
+    connected: bool = False
+    expires_at: str | None = None
+
+
+class CallbackPhoneIn(InputModel):
+    """The patient's own number, confirmed by the patient, for joining an insurer call."""
+
+    phone: str = Field(min_length=7, max_length=32)
+
+
 class ClaimAnalysisResult(ContractModel):
     status: WorkStatus
     case_state: CaseState
@@ -167,7 +213,7 @@ class DisputeApproval(InputModel):
         min_length=10, description="Exact authorization wording the patient saw and accepted."
     )
     authorize_call: bool = Field(
-        default=True, description="Also authorize ClaimShield to call the insurer."
+        default=True, description="Also authorize Amyna to call the insurer."
     )
 
 
@@ -263,3 +309,77 @@ class HealthStatus(ContractModel):
     app_env: str
     database: str
     modes: dict[str, str]
+
+
+# --------------------------------------------------------------------- assistant
+# The Amyna language layer (core/app/services/assistant_service.py) over HTTP.
+# These endpoints are STATELESS: no database access, no private data, no
+# authorization decisions -- they understand language and return candidates.
+
+
+class AssistantUnderstandIn(InputModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class AssistantUnderstandResult(ContractModel):
+    intent: str
+    # One of the allowlisted workflow nudges (never executed by the LLM layer).
+    suggested_action: str
+    # Ready-to-send, plain-English reply for the patient (conversational UIs).
+    reply: str
+    follow_up_question: str | None = None
+    # Candidates only: the caller must verify them before acting.
+    candidate_claim_number: str | None = None
+    candidate_patient_name: str | None = None
+    candidate_amount_cents: str | None = None
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class AssistantExplainIn(InputModel):
+    term: str = Field(min_length=1, max_length=200)
+
+
+class AssistantTermExplanation(ContractModel):
+    term: str
+    plain_language: str
+
+
+# --------------------------------------------------------------------- identity
+
+
+class AuthSessionCreate(InputModel):
+    """Start an Amyna session for a verified identity subject.
+
+    In dev/test/staging this issues a demo session (synthetic identities only).
+    In production this endpoint is disabled: the identity provider (e.g. the
+    Relay platform's verified user) must supply the Amyna-issued session token.
+    """
+
+    subject: str = Field(min_length=3, max_length=120)
+    display_name: str | None = Field(default=None, max_length=120)
+
+
+class AuthSessionResult(ContractModel):
+    user_id: str
+    patient_token: str = Field(
+        description="Opaque bearer token; Core stores only its hash. Not PHI."
+    )
+
+
+# --------------------------------------------------------------------- ops
+
+
+class JobsDrainResult(ContractModel):
+    ran: int
+    failed: int
+
+
+class MetricsSnapshot(ContractModel):
+    """GET /internal/metrics. Counts only -- never PHI."""
+
+    requests: dict[str, int] = Field(default_factory=dict)
+    latency_avg_ms: dict[str, int] = Field(default_factory=dict)
+    queue_depth: dict[str, int] = Field(default_factory=dict)
+    active_calls: int = 0
+    open_interventions: int = 0
+    stuck_cases_24h: int = 0

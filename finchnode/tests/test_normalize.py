@@ -60,7 +60,7 @@ def test_medication_attributes() -> None:
 def test_patient_profile_uses_coverage_and_contained_payer() -> None:
     profile = tools.get_patient_profile(FixtureClient(), PATIENT)
     assert profile.payer_name == "Acme Health Plan"
-    assert profile.payer_phone == "+15555550100"
+    assert profile.payer_phone == "+12487208903"  # demo roster payer line (fixtures)
     assert profile.member_ref == "SYN-MBR-000123" and profile.state == "CA"
 
 

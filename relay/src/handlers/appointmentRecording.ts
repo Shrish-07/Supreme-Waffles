@@ -7,6 +7,7 @@ import { BUTTONS, RECORDING_CONSENT_TEXT, copy } from "../ux/messages";
 import type { Conversation } from "../store";
 import { ingestRecording } from "./audioIngest";
 import type { Schemas } from "../coreClient";
+import { reviewBill } from "./approvalFlow";
 import { type HandlerContext, requireCase, say, serialize } from "./context";
 import { TranscriptionError } from "./transcription";
 
@@ -37,6 +38,7 @@ export async function answerRecordingChoice(
     });
     convo.recordingConsentId = consent.consent_id;
   }
+  convo.pendingPlace = undefined;
   convo.stage = "recording";
   if (!ctx.relay.simulatesRecording) {
     await say(ctx, convo, copy.sendVoiceMemo());
@@ -95,6 +97,10 @@ export async function onRecordingCompleted(
   }
   // Core makes this retry-safe: an already-stored transcript just re-runs extraction.
   const result = await ctx.core.completeVisit(convo.visitId, transcript);
+  convo.heardText = transcript.segments
+    .map((segment) => segment.text.trim())
+    .filter(Boolean)
+    .join(" ");
   if (result.status === "pending") {
     // FETCH_MODE=agentverse: the Visit Agent writes the evidence back to Core shortly.
     // Core takes no bill before that, so the patient waits here.
@@ -110,8 +116,9 @@ async function showVisitNotes(
   convo: Conversation,
   evidence: Schemas["EvidenceItem"][],
 ): Promise<void> {
-  await say(ctx, convo, copy.visitNotes(evidence));
+  await say(ctx, convo, copy.visitNotes(evidence, convo.heardText));
   convo.stage = "ready_for_bill";
+  await reviewBill(ctx, convo);
 }
 
 /** True (and the notes are shown) once the Visit Agent has recorded the visit's evidence. */

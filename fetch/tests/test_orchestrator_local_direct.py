@@ -117,7 +117,7 @@ def test_status_and_restart(runner: LocalDirectRunner) -> None:
     assert "No bill under review" in runner.send("status")[0]
     runner.send(DEMO_CONVERSATION[0])
     assert "AWAITING" in runner.send("status")[0] or "EVIDENCE" in runner.send("status")[0]
-    assert "ClaimShield" in runner.send("restart")[0]
+    assert "Amyna" in runner.send("restart")[0]
     assert runner.session.case_id is None
 
 

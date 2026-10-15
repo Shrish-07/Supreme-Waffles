@@ -1,4 +1,4 @@
-"""ClaimShield orchestrator: the only PUBLIC agent (ASI:One-discoverable).
+"""Amyna orchestrator: the only PUBLIC agent (ASI:One-discoverable).
 
 Thin uAgents wrapper around ``logic/orchestrate.py``:
 - chat protocol (ChatMessage / ChatAcknowledgement), manifest published;
@@ -6,7 +6,7 @@ Thin uAgents wrapper around ``logic/orchestrate.py``:
 - typed requests to the Visit / Claim / Dispute agents, replies correlated by
   ``request_id`` in ``ctx.storage``; an interval handler enforces timeouts;
 - REST ``POST /trigger`` for Core (FETCH_MODE=agentverse);
-- HELLO_WORLD=1 replies only "Hello from ClaimShield" (validate discovery first).
+- HELLO_WORLD=1 replies only "Hello from Amyna" (validate discovery first).
 
 Run:  python -m fetch.agents.orchestrator    (needs ORCHESTRATOR_SEED)
 """
@@ -55,12 +55,12 @@ from .session import (
 from .settings import AgentSettings, require_seed
 
 PORT = 8000
-HELLO_REPLY = "Hello from ClaimShield"
+HELLO_REPLY = "Hello from Amyna"
 PROFILE_PATH = (
     Path(__file__).resolve().parents[1] / "agentverse" / "agent_profiles" / "orchestrator.md"
 )
 DESCRIPTION = (
-    "ClaimShield helps patients review healthcare bills by comparing billed lines against "
+    "Amyna helps patients review healthcare bills by comparing billed lines against "
     "patient-authorized health records and visit evidence, identifying discrepancies and "
     "preparing evidence-backed dispute packages."
 )
@@ -87,7 +87,7 @@ def build_orchestrator(
     """Build the public orchestrator. Offline runs pass mailbox/publish False + agentverse."""
     settings = settings or AgentSettings.from_env()
     agent = Agent(
-        name="claimshield-orchestrator",
+        name="amyna-orchestrator",
         seed=require_seed("ORCHESTRATOR_SEED"),
         port=PORT,
         mailbox=mailbox,

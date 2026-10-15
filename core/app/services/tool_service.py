@@ -20,6 +20,7 @@ from claimshield_contracts.enums import (
     CaseState,
     ConsentType,
     PatientDecision,
+    RecordType,
 )
 from claimshield_contracts.ids import new_id
 from claimshield_contracts.models import (
@@ -42,10 +43,12 @@ from claimshield_contracts.tool_api import (
     GetCaseRequest,
     GetClaimLineRequest,
     GetDisputeCaseRequest,
+    GetPatientContextRequest,
     GetSupportingEvidenceRequest,
     GetVisitTranscriptRequest,
     IngestClaimRequest,
     PatientClaims,
+    PatientContext,
     PatientDataRequest,
     PatientRecords,
     RecordConsentRequest,
@@ -65,7 +68,7 @@ from claimshield_contracts.tool_api import (
 )
 
 from .. import mappers
-from ..audit import record_audit
+from ..audit import mask_member_ref, record_audit
 from ..auth import ServiceIdentity, tool_scope
 from ..db import utcnow
 from ..errors import DomainError, Forbidden, InvalidInput, NotFound
@@ -222,6 +225,25 @@ class ToolService:
 
     # ------------------------------------------------------------------ visit evidence
 
+    def get_patient_context(self, req: GetPatientContextRequest) -> PatientContext:
+        """Consent-gated, minimized patient context (prompt task 6).
+
+        Core is the only authority that links a case to a patient identity; the
+        language/agent layers get identifiers and masked labels -- never secrets.
+        """
+        with self._tx(ToolName.GET_PATIENT_CONTEXT, req.case_id, req.agent_run) as db:
+            case = case_service.get_case_row(db, req.case_id)
+            return PatientContext(
+                case_id=case.id,
+                patient_display_name=case.patient_display_name,
+                member_ref_masked=mask_member_ref(case.member_ref) if case.member_ref else None,
+                payer_name=case.payer_name,
+                finchnode_patient_id=case.finchnode_patient_id,
+                has_health_data_consent=case_service.has_consent(
+                    db, case.id, ConsentType.HEALTH_DATA_ACCESS
+                ),
+            )
+
     def get_visit_transcript(self, req: GetVisitTranscriptRequest) -> VisitTranscriptView:
         with self._tx(ToolName.GET_VISIT_TRANSCRIPT, req.case_id, req.agent_run) as db:
             visit = (
@@ -284,20 +306,27 @@ class ToolService:
             claims = self._c.finchnode.get_patient_claims(self._patient_id(db, req.case_id))
             return PatientClaims(claims=claims)
 
+    def _records(self, pid: str, record_type: RecordType, records: list) -> PatientRecords:
+        gap = self._c.finchnode.record_gaps(pid).get(record_type)
+        return PatientRecords(records=records, complete=gap is None, gap=gap)
+
     def get_patient_encounters(self, req: PatientDataRequest) -> PatientRecords:
         with self._tx(ToolName.GET_PATIENT_ENCOUNTERS, req.case_id, req.agent_run) as db:
             pid = self._patient_id(db, req.case_id)
-            return PatientRecords(records=self._c.finchnode.get_patient_encounters(pid))
+            records = self._c.finchnode.get_patient_encounters(pid)
+            return self._records(pid, RecordType.ENCOUNTER, records)
 
     def get_patient_procedures(self, req: PatientDataRequest) -> PatientRecords:
         with self._tx(ToolName.GET_PATIENT_PROCEDURES, req.case_id, req.agent_run) as db:
             pid = self._patient_id(db, req.case_id)
-            return PatientRecords(records=self._c.finchnode.get_patient_procedures(pid))
+            records = self._c.finchnode.get_patient_procedures(pid)
+            return self._records(pid, RecordType.PROCEDURE, records)
 
     def get_patient_medications(self, req: PatientDataRequest) -> PatientRecords:
         with self._tx(ToolName.GET_PATIENT_MEDICATIONS, req.case_id, req.agent_run) as db:
             pid = self._patient_id(db, req.case_id)
-            return PatientRecords(records=self._c.finchnode.get_patient_medications(pid))
+            records = self._c.finchnode.get_patient_medications(pid)
+            return self._records(pid, RecordType.MEDICATION, records)
 
     # ------------------------------------------------------------------ analysis
 

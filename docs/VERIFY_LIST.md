@@ -27,15 +27,24 @@ Legend: ☐ = still to verify · ☑ = verified while building the scaffold (how
 
 ## FinchNode (Member 4)
 
-| | Item | Where |
-|---|---|---|
-| ☐ | Demo (keyless) and sandbox base URLs | `finchnode/client.py:5`, `.env.example` |
-| ☐ | Endpoint paths (`/fhir/Patient/{id}`, `/fhir/{ResourceType}?patient=`) and whether responses are FHIR R4 Bundles | `finchnode/client.py:76-77` |
-| ☐ | Auth header for sandbox (`Authorization: Bearer ck_test_…`) and the key prefix | `finchnode/client.py:33,102` |
-| ☐ | Pagination (`Bundle.link[relation=next]`) | `finchnode/client.py:138` |
-| ☐ | Which resource types exist for claims (Claim vs ExplanationOfBenefit) and medications (MedicationAdministration vs MedicationStatement/Request); `normalize.py` already accepts all of them | `finchnode/normalize.py`, `finchnode/tools.py` |
-| ☐ | Coverage → payer name/phone/member id location | `finchnode/normalize.py::normalize_patient` |
-| ☐ | Whether an MCP server exists and is worth using | `finchnode/mcp_optional.md` |
+Verified 2026-10-09 against finchnode.com/docs (Markdown at `finchnode.com/docs/<page>.md`,
+index `finchnode.com/llms.txt`, spec `finchnode.com/openapi.yaml`) and the live public demo.
+
+| | Item | Answer | Where |
+|---|---|---|---|
+| ☑ | Base URLs | demo `https://api.finchnode.com/demo/v1` (keyless); sandbox and production share `https://api.finchnode.com/api/v1` | `finchnode/client.py` |
+| ☑ | Endpoint paths / FHIR | Only the demo serves FHIR, and it has no `Procedure` or `Claim` type. Every environment serves the normalized snapshot `GET /users/{subject}/records` (plus `/records/{category}` pages and a `/changes` feed), which is all Core reads | `finchnode/records.py` |
+| ☑ | Auth + keys | `Authorization: Bearer ck_test_…` (sandbox) / `ck_live_…` (production) | `finchnode/client.py` |
+| ☑ | Pagination | Category pages use `limit`/`cursor` → `hasMore`/`nextCursor`; the snapshot returned complete data for the 40-lab demo patient | `finchnode/client.py` |
+| ☑ | Claims / medications | Claims are `ExplanationOfBenefit` summaries with **no line items** (`ClaimRecord`: status, outcome, claimType, providerName); medications are Request/Dispense/Administration (only administrations count as "given") | `finchnode/records.py` |
+| ☑ | Coverage | `claims.coverages`: payor name + `subscriberId`, **no phone** → `PAYER_PHONES` | `finchnode/records.py`, `core/app/config.py` |
+| ☑ | Completeness | `meta.syncStatus`, `availableCategories`, `missingCategories`, `warnings` (`source_unavailable`…); shared categories in `categories` | `finchnode/records.py::Snapshot.gap` |
+| ☑ | Errors | `{error:{type,code,message,requestId}}`; 410 `consent_inactive`, 429 + `Retry-After`, 300 req/min/key | `finchnode/client.py` |
+| ☑ | Linking | Hosted Connect: `POST /connect/sessions` → `url`; `consent.granted` webhook / `GET /connect/sessions/{id}` gives the `subject` (`u_` + 16 hex) | `core/app/services/finchnode_service.py` |
+| ☑ | Webhooks | `FinchNode-Signature: t=…,v1=<hex HMAC-SHA256(whsec, "t." + body)>`, `FinchNode-Event-Id`, answer within 5 s, retries ~41 h | `core/app/services/finchnode_service.py` |
+| ☑ | MCP server | exists (`api.finchnode.com/demo/mcp`, `api.finchnode.com/api/mcp`); not used | `finchnode/mcp_optional.md` |
+| ☐ | Sandbox `records.advance` content for `baseline-adult` (which records the next phase adds) | run it once and read `/changes` | `scripts/finchnode_sandbox.py` |
+| ☐ | Snapshot completeness for very large production records (vs paging categories) | verify with a real patient | `finchnode/client.py` |
 
 ## Relay (Member 2)
 
@@ -54,13 +63,12 @@ Legend: ☐ = still to verify · ☑ = verified while building the scaffold (how
 
 | | Item | Where |
 |---|---|---|
-| ☐ | Realtime WebSocket URL, model query parameter, auth header | `core/app/adapters/xai_voice/live.py:107,117`, `.env.example` (`XAI_REALTIME_URL`, `XAI_VOICE_MODEL`) |
-| ☐ | Voice names (`XAI_VOICE_NAME`) | `.env.example` |
-| ☐ | `session.update` schema: instructions, tools, tool_choice, turn detection, input transcription | `core/app/adapters/xai_voice/live.py:93,199` |
-| ☐ | Event names: input transcription completed, output transcript done, function-call arguments done, error | `core/app/adapters/xai_voice/live.py:36` |
-| ☐ | Function-call result format (`conversation.item.create` + `function_call_output`) and `response.create` | `core/app/adapters/xai_voice/live.py` |
-| ☐ | How to force an exact utterance / interrupt (`response.cancel`, per-response instructions) | `core/app/adapters/xai_voice/live.py:178` |
-| ☐ | SIP: whether xAI exposes a SIP endpoint, its URI format, how a call id is passed (transfer `headers`), and how the control WebSocket attaches to a SIP call | `core/app/adapters/telephony/telnyx_sip.py`, `XAI_SIP_URI` |
+| ✅ (docs 2026-10-08) | Realtime WS URL `wss://api.x.ai/v1/realtime`, `?model=` (fresh) / `?call_id=` (SIP attach), `Authorization: Bearer` header, default voice `eve` | `core/app/adapters/xai_voice/live.py`, speech-to-speech docs |
+| ✅ (docs 2026-10-08) | Session config: `session.update` with `voice`, `instructions`, `turn_detection server_vad`; `response.create` drives turns; per-response `instructions` overrides + `response.cancel` interruption + xAI's `force_message` extension verified | `live.py:93-104,178-206` |
+| ☐ (partial) | Exact server event names for transcripts/function calls (`response.function_call_arguments.done`, transcription.completed) — schema described generically; confirm on first live call | `live.py:37-45` |
+| ✅ (docs 2026-10-08) | SIP is inbound: register a number, carrier routes to `sip:{number}@sip.voice.x.ai;transport=tls`, xAI posts signed `realtime.call.incoming` webhook with `data.call_id` + `data.sip_headers`, attach WS with `?call_id=`; REFER (`POST /v1/realtime/calls/{call_id}/refer`) for outbound transfer; custom SIP headers are NOT sent on REFER | `adapters/xai_voice/sip_webhook.py`, `routers/voice.py` `/voice/xai/webhook`, `attach_sip_session` |
+| ☐ | Whether our carrier preserves the `X-Amyna-Call-Id` SIP header into xAI's inbound webhook (attach correlation); attach is fail-safe otherwise | `telnyx_sip.py`, `routers/voice.py`; first live call decides |
+| ☐ | xAI phone-number registration call (BYO trunk) payload + which endpoint; signing-secret rotation flow | registration is account setup; docs/SETUP_KEYS.md |
 
 ## Telnyx (Member 1)
 
@@ -68,7 +76,8 @@ Legend: ☐ = still to verify · ☑ = verified while building the scaffold (how
 |---|---|---|
 | ☐ | Voice API connection type (numeric id ↔ Call Control application), `to` as E.164, `client_state` echoed on webhooks | `core/app/adapters/telephony/telnyx_sip.py`, `TELNYX_CONNECTION_ID` |
 | ☐ | `transfer` to an external `sip:` URI: `headers` (custom SIP headers) accepted, `call.bridged` semantics (insurer leg ↔ xAI leg) | `core/app/adapters/telephony/telnyx_sip.py` |
-| ☐ | Webhook signed-payload format exactly matches telnyx-python's verification (`timestamp` + raw body, Ed25519, base64) | `core/app/adapters/telephony/webhook_signature.py`, `TELNYX_PUBLIC_KEY` in Mission Control → API keys |
+| ✅ (docs 2026-10-08) | Headers `telnyx-timestamp` + `telnyx-signature-ed25519`, Ed25519 over timestamp + raw body, public key from Mission Control → API keys → Public key; ack 200 promptly; dedupe by event `id`; replay window — matches `webhook_signature.py` | `core/app/adapters/telephony/webhook_signature.py` |
+| ☐ | Exact Call Control payload field names (`client_state`, `timeout_secs`, transfer `to` sip, `bridge` action) — platform docs confirmed the actions exist; verify field names against the consolidated OpenAPI spec (developers.telnyx.com → OpenAPI) before the first live call | `core/app/adapters/telephony/telnyx_sip.py` |
 | ☐ | `PUBLIC_BASE_URL` stability (free ngrok URLs can change; webhook_url is set per call at dial time) | `.env` |
 
 ## Ollama / Qwen3 (Member 4)
